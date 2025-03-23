@@ -26,6 +26,31 @@ interface ChatBarProps {
   isConnected: boolean;
 }
 
+// Function to determine if a string is JSON and simplify it for display
+const formatMessage = (text: string): string => {
+  try {
+    // Try to parse as JSON
+    const parsed = JSON.parse(text);
+    console.log("parsed = ", parsed);
+    
+    // If it's a success response with tool_result, show only the tool_result
+    if (parsed.status === 'success' && parsed.tool_result) {
+      return parsed.tool_result;
+    }
+    
+    // If it contains an error, display that
+    if (parsed.error) {
+      return `Error: ${parsed.error}`;
+    }
+    
+    // Default to original message
+    return text;
+  } catch (e) {
+    // Not JSON, return original
+    return text;
+  }
+};
+
 const ChatBar: React.FC<ChatBarProps> = ({ messages, onSendMessage, isConnected }) => {
   const [input, setInput] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
@@ -104,7 +129,9 @@ const ChatBar: React.FC<ChatBarProps> = ({ messages, onSendMessage, isConnected 
                 color: message.sender === 'user' ? 'primary.contrastText' : 'text.primary',
               }}
             >
-              <Typography variant="body1">{message.text}</Typography>
+              <Typography variant="body1">
+                {message.sender === 'ai' ? formatMessage(message.text) : message.text}
+              </Typography>
               <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
                 {message.timestamp.toLocaleTimeString()}
               </Typography>

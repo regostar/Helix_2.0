@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Paper,
@@ -10,26 +10,37 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
-  List,
-  ListItem,
-  ListItemText,
-  ListItemSecondaryAction,
-  Divider,
   MenuItem,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
-import EditIcon from '@mui/icons-material/Edit';
-import DeleteIcon from '@mui/icons-material/Delete';
-import AccessTimeIcon from '@mui/icons-material/AccessTime';
+import SequenceDisplay from './SequenceDisplay';
 
 function Workspace({ sequence, onSequenceUpdate }) {
   const [openDialog, setOpenDialog] = useState(false);
   const [editingStep, setEditingStep] = useState(null);
+  const [parsedSequence, setParsedSequence] = useState(null);
   const [newStep, setNewStep] = useState({
     type: 'email',
     content: '',
     delay: 0,
+    personalization_tips: '',
   });
+
+  useEffect(() => {
+    // Parse the sequence if it's a string
+    if (typeof sequence === 'string') {
+      try {
+        const parsed = JSON.parse(sequence);
+        if (parsed.tool_result) {
+          setParsedSequence(JSON.parse(parsed.tool_result));
+        }
+      } catch (e) {
+        console.error('Error parsing sequence:', e);
+      }
+    } else {
+      setParsedSequence(sequence);
+    }
+  }, [sequence]);
 
   const handleOpenDialog = (step) => {
     if (step) {
@@ -41,6 +52,7 @@ function Workspace({ sequence, onSequenceUpdate }) {
         type: 'email',
         content: '',
         delay: 0,
+        personalization_tips: '',
       });
     }
     setOpenDialog(true);
@@ -53,26 +65,28 @@ function Workspace({ sequence, onSequenceUpdate }) {
       type: 'email',
       content: '',
       delay: 0,
+      personalization_tips: '',
     });
   };
 
   const handleSaveStep = () => {
     if (!newStep.content) return;
 
-    const updatedSequence = editingStep
-      ? sequence.map((step) =>
+    const updatedSteps = editingStep
+      ? parsedSequence.steps.map((step) =>
           step.id === editingStep.id
             ? { ...newStep, id: step.id }
             : step
         )
-      : [...sequence, { ...newStep, id: Date.now().toString() }];
+      : [...(parsedSequence?.steps || []), { ...newStep, id: Date.now().toString() }];
+
+    const updatedSequence = {
+      ...parsedSequence,
+      steps: updatedSteps,
+    };
 
     onSequenceUpdate(updatedSequence);
     handleCloseDialog();
-  };
-
-  const handleDeleteStep = (id) => {
-    onSequenceUpdate(sequence.filter((step) => step.id !== id));
   };
 
   return (
@@ -89,48 +103,7 @@ function Workspace({ sequence, onSequenceUpdate }) {
           </Button>
         </Box>
 
-        <List>
-          {sequence.map((step, index) => (
-            <React.Fragment key={step.id}>
-              <ListItem>
-                <ListItemText
-                  primary={
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <Typography variant="subtitle1">
-                        Step {index + 1}: {step.type}
-                      </Typography>
-                      {step.delay > 0 && (
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                          <AccessTimeIcon fontSize="small" />
-                          <Typography variant="caption">
-                            {step.delay} days
-                          </Typography>
-                        </Box>
-                      )}
-                    </Box>
-                  }
-                  secondary={step.content}
-                />
-                <ListItemSecondaryAction>
-                  <IconButton
-                    edge="end"
-                    onClick={() => handleOpenDialog(step)}
-                    sx={{ mr: 1 }}
-                  >
-                    <EditIcon />
-                  </IconButton>
-                  <IconButton
-                    edge="end"
-                    onClick={() => handleDeleteStep(step.id)}
-                  >
-                    <DeleteIcon />
-                  </IconButton>
-                </ListItemSecondaryAction>
-              </ListItem>
-              {index < sequence.length - 1 && <Divider />}
-            </React.Fragment>
-          ))}
-        </List>
+        {parsedSequence && <SequenceDisplay sequence={parsedSequence} />}
       </Paper>
 
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
@@ -165,6 +138,16 @@ function Workspace({ sequence, onSequenceUpdate }) {
               value={newStep.delay}
               onChange={(e) =>
                 setNewStep({ ...newStep, delay: parseInt(e.target.value) || 0 })
+              }
+              fullWidth
+            />
+            <TextField
+              label="Personalization Tips"
+              multiline
+              rows={2}
+              value={newStep.personalization_tips}
+              onChange={(e) =>
+                setNewStep({ ...newStep, personalization_tips: e.target.value })
               }
               fullWidth
             />

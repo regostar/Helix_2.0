@@ -15,6 +15,7 @@ import {
   ListItemText,
   ListItemSecondaryAction,
   Divider,
+  Chip,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
@@ -25,21 +26,37 @@ interface SequenceStep {
   id: string;
   type: string;
   content: string;
-  delay?: number;
+  delay: number;
+  personalization_tips?: string;
+}
+
+interface SequenceMetadata {
+  role: string;
+  industry: string;
+  seniority: string;
+  company_type: string;
+  generated_at: string;
+}
+
+interface Sequence {
+  metadata: SequenceMetadata;
+  steps: SequenceStep[];
 }
 
 interface WorkspaceProps {
-  sequence: SequenceStep[];
-  onSequenceUpdate: (sequence: SequenceStep[]) => void;
+  sequence: Sequence | null;
+  onSequenceUpdate: (steps: SequenceStep[]) => void;
 }
 
 const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => {
   const [openDialog, setOpenDialog] = useState(false);
   const [editingStep, setEditingStep] = useState<SequenceStep | null>(null);
-  const [newStep, setNewStep] = useState<Partial<SequenceStep>>({
+  const [newStep, setNewStep] = useState<SequenceStep>({
+    id: Date.now().toString(),
     type: 'email',
     content: '',
     delay: 0,
+    personalization_tips: ''
   });
 
   const handleOpenDialog = (step?: SequenceStep) => {
@@ -49,9 +66,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
     } else {
       setEditingStep(null);
       setNewStep({
+        id: Date.now().toString(),
         type: 'email',
         content: '',
         delay: 0,
+        personalization_tips: ''
       });
     }
     setOpenDialog(true);
@@ -61,36 +80,58 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
     setOpenDialog(false);
     setEditingStep(null);
     setNewStep({
+      id: Date.now().toString(),
       type: 'email',
       content: '',
       delay: 0,
+      personalization_tips: ''
     });
   };
 
   const handleSaveStep = () => {
-    if (!newStep.content) return;
+    if (!newStep.content || !sequence) return;
 
-    const updatedSequence = editingStep
-      ? sequence.map((step) =>
+    const updatedSteps = editingStep
+      ? sequence.steps.map((step) =>
           step.id === editingStep.id
-            ? { ...newStep, id: step.id }
+            ? { ...step, ...newStep }
             : step
         )
-      : [...sequence, { ...newStep, id: Date.now().toString() }];
+      : [...sequence.steps, { ...newStep, id: Date.now().toString() }];
 
-    onSequenceUpdate(updatedSequence);
+    onSequenceUpdate(updatedSteps);
     handleCloseDialog();
   };
 
   const handleDeleteStep = (id: string) => {
-    onSequenceUpdate(sequence.filter((step) => step.id !== id));
+    if (!sequence) return;
+    onSequenceUpdate(sequence.steps.filter((step) => step.id !== id));
   };
+
+  if (!sequence) {
+    return (
+      <Box sx={{ flexGrow: 1, p: 3, overflow: 'auto' }}>
+        <Paper sx={{ height: '100%', p: 3, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <Typography variant="h6" color="text.secondary">
+            No sequence generated yet. Start a conversation to create one.
+          </Typography>
+        </Paper>
+      </Box>
+    );
+  }
 
   return (
     <Box sx={{ flexGrow: 1, p: 3, overflow: 'auto' }}>
       <Paper sx={{ height: '100%', p: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-          <Typography variant="h5">Recruiting Sequence</Typography>
+        {/* Metadata Section */}
+        <Box sx={{ mb: 3 }}>
+          <Typography variant="h5" gutterBottom>Recruiting Sequence</Typography>
+          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
+            <Chip label={`Role: ${sequence.metadata.role}`} color="primary" />
+            <Chip label={`Industry: ${sequence.metadata.industry}`} />
+            <Chip label={`Seniority: ${sequence.metadata.seniority}`} />
+            <Chip label={`Company: ${sequence.metadata.company_type}`} />
+          </Box>
           <Button
             variant="contained"
             startIcon={<AddIcon />}
@@ -101,7 +142,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
         </Box>
 
         <List>
-          {sequence.map((step, index) => (
+          {sequence.steps.map((step, index) => (
             <React.Fragment key={step.id}>
               <ListItem>
                 <ListItemText
@@ -110,7 +151,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
                       <Typography variant="subtitle1">
                         Step {index + 1}: {step.type}
                       </Typography>
-                      {step.delay && step.delay > 0 && (
+                      {step.delay > 0 && (
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           <AccessTimeIcon fontSize="small" />
                           <Typography variant="caption">
@@ -120,7 +161,16 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
                       )}
                     </Box>
                   }
-                  secondary={step.content}
+                  secondary={
+                    <Box>
+                      <Typography variant="body2">{step.content}</Typography>
+                      {step.personalization_tips && (
+                        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
+                          Personalization Tips: {step.personalization_tips}
+                        </Typography>
+                      )}
+                    </Box>
+                  }
                 />
                 <ListItemSecondaryAction>
                   <IconButton
@@ -138,7 +188,7 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
                   </IconButton>
                 </ListItemSecondaryAction>
               </ListItem>
-              {index < sequence.length - 1 && <Divider />}
+              {index < sequence.steps.length - 1 && <Divider />}
             </React.Fragment>
           ))}
         </List>
@@ -179,6 +229,16 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
               value={newStep.delay}
               onChange={(e) =>
                 setNewStep({ ...newStep, delay: parseInt(e.target.value) || 0 })
+              }
+              fullWidth
+            />
+            <TextField
+              label="Personalization Tips"
+              multiline
+              rows={2}
+              value={newStep.personalization_tips || ''}
+              onChange={(e) =>
+                setNewStep({ ...newStep, personalization_tips: e.target.value })
               }
               fullWidth
             />
