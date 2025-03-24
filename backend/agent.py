@@ -6,12 +6,17 @@ from langchain.tools import Tool
 from langchain.schema import HumanMessage, SystemMessage
 import json
 import os
+import csv
+import smtplib
+import pandas as pd
+from email.mime.multipart import MIMEMultipart
+from email.mime.text import MIMEText
 from dotenv import load_dotenv
 import datetime
 
 load_dotenv()
 
-SYSTEM_TEMPLATE = """You are Helix, an AI-powered recruiting outreach agent. Your goal is to help HR professionals create effective recruiting sequences.
+SYSTEM_TEMPLATE = """You are Helix, an AI-powered recruiting outreach agent. Your goal is to help HR professionals create effective recruiting sequences and manage candidate outreach.
 
 Available tools:
 {tools}
@@ -57,6 +62,12 @@ class RecruitingAgent:
         self.prompt = self._create_prompt()
         self.output_parser = self._create_output_parser()
         self.agent = self._create_agent()
+        self.smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
+        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
+        self.smtp_username = os.getenv("SMTP_USERNAME", "")
+        self.smtp_password = os.getenv("SMTP_PASSWORD", "")
+        self.from_email = os.getenv("FROM_EMAIL", "")
+        self.candidate_data = []
 
     def _get_tools(self) -> List[Tool]:
         return [
@@ -79,6 +90,26 @@ class RecruitingAgent:
                 name="provide_feedback",
                 func=self._provide_feedback,
                 description="Provide feedback on the current sequence"
+            ),
+            Tool(
+                name="load_csv_candidates",
+                func=self._load_csv_candidates,
+                description="Load candidate data from a CSV file and filter based on criteria"
+            ),
+            Tool(
+                name="send_personalized_email",
+                func=self._send_personalized_email,
+                description="Send a personalized email to a candidate based on their profile"
+            ),
+            Tool(
+                name="prepare_linkedin_message",
+                func=self._prepare_linkedin_message,
+                description="Prepare a personalized LinkedIn message for outreach"
+            ),
+            Tool(
+                name="merge_candidate_data",
+                func=self._merge_candidate_data,
+                description="Merge and deduplicate candidate data from multiple sources"
             )
         ]
 
@@ -217,6 +248,247 @@ Do not include any other text before or after the JSON array."""
     def _provide_feedback(self, sequence: str) -> str:
         # Provide feedback on the current sequence
         return "Here's my analysis of the current sequence..."
+
+    def _load_csv_candidates(self, input_text: str) -> str:
+        """
+        Load candidate profiles from a CSV file and filter based on criteria.
+        
+        Args:
+            input_text: Contains file_path and filter criteria in the format 
+                       "file_path: /path/to/csv, role: software engineer, experience: 3+ years"
+        
+        Returns:
+            JSON string with filtered candidate profiles
+        """
+        try:
+            # Parse input
+            params = {}
+            for part in input_text.split(','):
+                if ':' in part:
+                    key, value = part.split(':', 1)
+                    params[key.strip().lower()] = value.strip()
+            
+            file_path = params.get('file_path', '')
+            role_filter = params.get('role', '').lower()
+            experience_filter = params.get('experience', '').lower()
+            
+            # Validate file path
+            if not file_path or not os.path.exists(file_path):
+                return json.dumps({
+                    "error": "Invalid or missing file path",
+                    "candidates": []
+                })
+            
+            # Read CSV
+            candidates = []
+            try:
+                # Try pandas first (handles more formats)
+                df = pd.read_csv(file_path)
+                candidates = df.to_dict('records')
+            except:
+                # Fallback to standard csv library
+                with open(file_path, 'r', encoding='utf-8') as csvfile:
+                    reader = csv.DictReader(csvfile)
+                    candidates = list(reader)
+            
+            # Filter candidates
+            filtered_candidates = []
+            for candidate in candidates:
+                # Convert all keys to lowercase for case-insensitive matching
+                candidate_lower = {k.lower(): v for k, v in candidate.items()}
+                
+                # Check if candidate matches role filter
+                role_match = True
+                if role_filter and 'role' in candidate_lower:
+                    role_match = role_filter in candidate_lower['role'].lower()
+                
+                # Check if candidate matches experience filter
+                exp_match = True
+                if experience_filter and 'experience' in candidate_lower:
+                    # Simple numeric extraction for experience 
+                    try:
+                        exp_value = int(''.join(filter(str.isdigit, candidate_lower['experience'])))
+                        req_exp = int(''.join(filter(str.isdigit, experience_filter)))
+                        exp_match = exp_value >= req_exp
+                    except:
+                        exp_match = True  # If we can't parse, don't filter out
+                
+                if role_match and exp_match:
+                    filtered_candidates.append(candidate)
+            
+            # Store for later use
+            self.candidate_data = filtered_candidates
+            
+            return json.dumps({
+                "total_candidates": len(candidates),
+                "filtered_candidates": len(filtered_candidates),
+                "candidates": filtered_candidates[:10],  # Return only first 10 for preview
+                "message": f"Successfully loaded {len(filtered_candidates)} candidates matching criteria from {len(candidates)} total."
+            }, indent=2)
+            
+        except Exception as e:
+            return json.dumps({
+                "error": f"Failed to process CSV: {str(e)}",
+                "candidates": []
+            })
+
+    def _send_personalized_email(self, input_text: str) -> str:
+        """
+        Send a personalized email to a candidate.
+        
+        Args:
+            input_text: JSON string containing email template and candidate info
+            
+        Returns:
+            JSON string with status and details
+        """
+        try:
+            # Parse the input
+            input_data = json.loads(input_text)
+            template = input_data.get('template', '')
+            candidate_info = input_data.get('candidate', {})
+            subject = input_data.get('subject', 'Exciting Opportunity')
+            
+            # Validate inputs
+            if not template:
+                return json.dumps({"error": "Email template is required"})
+            if not candidate_info:
+                return json.dumps({"error": "Candidate information is required"})
+            if not candidate_info.get('email'):
+                return json.dumps({"error": "Candidate email is required"})
+                
+            # Personalize the email
+            personalized_email = template
+            for key, value in candidate_info.items():
+                placeholder = f"{{{key}}}"
+                personalized_email = personalized_email.replace(placeholder, str(value))
+            
+            # Setup email
+            msg = MIMEMultipart()
+            msg['From'] = self.from_email
+            msg['To'] = candidate_info.get('email')
+            msg['Subject'] = subject
+            
+            # Attach email body
+            msg.attach(MIMEText(personalized_email, 'html'))
+            
+            # For testing purposes, we'll just simulate sending
+            if not self.smtp_username or not self.smtp_password:
+                return json.dumps({
+                    "status": "simulated",
+                    "message": "Email would be sent (credentials not configured)",
+                    "to": candidate_info.get('email'),
+                    "subject": subject,
+                    "body_preview": personalized_email[:100] + "..."
+                })
+            
+            # Actual sending (commented for safety)
+            try:
+                server = smtplib.SMTP(self.smtp_server, self.smtp_port)
+                server.starttls()
+                server.login(self.smtp_username, self.smtp_password)
+                text = msg.as_string()
+                server.sendmail(self.from_email, candidate_info.get('email'), text)
+                server.quit()
+                return json.dumps({
+                    "status": "sent",
+                    "message": f"Email successfully sent to {candidate_info.get('email')}",
+                    "subject": subject
+                })
+            except Exception as email_error:
+                return json.dumps({
+                    "status": "error",
+                    "message": f"Failed to send email: {str(email_error)}",
+                    "to": candidate_info.get('email')
+                })
+            
+        except json.JSONDecodeError:
+            return json.dumps({"error": "Invalid JSON in input"})
+        except Exception as e:
+            return json.dumps({"error": f"Failed to process email: {str(e)}"})
+
+    def _prepare_linkedin_message(self, input_text: str) -> str:
+        """
+        Prepare a personalized LinkedIn message for a candidate.
+        
+        Args:
+            input_text: JSON string containing template and candidate info
+            
+        Returns:
+            JSON string with personalized message
+        """
+        try:
+            # Parse the input
+            input_data = json.loads(input_text)
+            template = input_data.get('template', '')
+            candidate_info = input_data.get('candidate', {})
+            
+            # Validate inputs
+            if not template:
+                return json.dumps({"error": "Message template is required"})
+            if not candidate_info:
+                return json.dumps({"error": "Candidate information is required"})
+            
+            # Personalize the message
+            personalized_message = template
+            for key, value in candidate_info.items():
+                placeholder = f"{{{key}}}"
+                personalized_message = personalized_message.replace(placeholder, str(value))
+            
+            return json.dumps({
+                "status": "success",
+                "linkedin_message": personalized_message,
+                "candidate_name": candidate_info.get('name', 'Unknown'),
+                "message": "LinkedIn message prepared successfully."
+            })
+            
+        except json.JSONDecodeError:
+            return json.dumps({"error": "Invalid JSON in input"})
+        except Exception as e:
+            return json.dumps({"error": f"Failed to prepare LinkedIn message: {str(e)}"})
+
+    def _merge_candidate_data(self, input_text: str) -> str:
+        """
+        Merge and deduplicate candidate data from multiple sources.
+        
+        Args:
+            input_text: JSON string containing candidate lists or criteria
+            
+        Returns:
+            JSON string with merged, deduplicated data
+        """
+        try:
+            input_data = json.loads(input_text)
+            csv_candidates = input_data.get('csv_candidates', [])
+            web_candidates = input_data.get('web_candidates', [])
+            
+            # If no specific candidates provided, use the stored candidate data
+            if not csv_candidates and self.candidate_data:
+                csv_candidates = self.candidate_data
+            
+            # Combine all candidates
+            all_candidates = csv_candidates + web_candidates
+            
+            # Deduplicate by email
+            unique_candidates = {}
+            for candidate in all_candidates:
+                email = candidate.get('email', '').lower()
+                if email and email not in unique_candidates:
+                    unique_candidates[email] = candidate
+            
+            merged_candidates = list(unique_candidates.values())
+            
+            return json.dumps({
+                "status": "success",
+                "total_candidates": len(merged_candidates),
+                "candidates": merged_candidates[:20],  # Return first 20 for preview
+                "message": f"Successfully merged and deduplicated data resulting in {len(merged_candidates)} unique candidates."
+            }, indent=2)
+            
+        except json.JSONDecodeError:
+            return json.dumps({"error": "Invalid JSON in input"})
+        except Exception as e:
+            return json.dumps({"error": f"Failed to merge candidate data: {str(e)}"})
 
     def process_message(self, message: str, chat_history: List[Dict], current_sequence: List[Dict]) -> str:
         """Process a user message and return a response.

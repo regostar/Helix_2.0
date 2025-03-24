@@ -16,3 +16,4 @@ black>=23.11.0
 flake8>=6.1.0
 gevent>=23.9.1
 gevent-websocket>=0.10.1 
+pandas
