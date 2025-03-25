@@ -1,117 +1,99 @@
-# Project Helix - AI Recruiting Agent
+# Helix - AI-Powered Recruiting Outreach Agent
 
-Helix is an AI-powered recruiting outreach system that automates and enhances the candidate outreach process. The system helps HR professionals create personalized recruiting sequences, load candidate data, and send customized outreach messages.
+Helix is an intelligent recruiting outreach agent that transforms how HR finds top talent through a chat-driven interface and dynamic sequence generation.
 
-## Key Features
+## Features
 
-- **AI-Generated Recruiting Sequences**: Create customized outreach sequences based on role, industry, and company type
-- **CSV Candidate Management**: Load, filter, and manage candidate profiles from CSV files
-- **Email Integration**: Send personalized emails to candidates with dynamic content
-- **LinkedIn Outreach**: Prepare personalized LinkedIn messages
-- **Email Personalization**: Automatically personalize messages using candidate information
+- 🤖 AI-powered chat interface for natural interaction
+- 📝 Dynamic sequence generation in real-time
+- ✏️ Live editing capabilities
+- 🔄 Real-time updates and synchronization
+- 🎯 Guided prompts for campaign customization
 
-## Setup Instructions
+## Tech Stack
 
-### Backend Setup
+### Frontend
+- React with TypeScript
+- Socket.io for real-time communication
+- Modern UI components and styling
 
-1. Navigate to the `backend` directory:
-   ```
-   cd backend
-   ```
+### Backend
+- Flask (Python)
+- PostgreSQL database
+- Langchain for LLM integration
+- Socket.io for real-time updates
 
-2. Create a virtual environment:
-   ```
-   python -m venv venv
-   source venv/bin/activate  # On Windows: venv\Scripts\activate
-   ```
+## Getting Started
 
-3. Install dependencies:
-   ```
-   pip install -r requirements.txt
-   ```
+### Prerequisites
+- Node.js (v16 or higher)
+- Python 3.8+
+- PostgreSQL
+- npm or yarn
 
-4. Create a `.env` file based on `.env.example` and add your credentials:
-   ```
-   cp .env.example .env
-   ```
-   - Add your OpenAI API key
-   - Configure email settings (SMTP server, username, password)
+### Installation
 
-5. Start the backend server:
-   ```
-   python app.py
-   ```
+1. Clone the repository:
+```bash
+git clone https://github.com/yourusername/helix.git
+cd helix
+```
 
-### Frontend Setup
+2. Set up the frontend:
+```bash
+cd frontend
+npm install
+```
 
-1. Navigate to the `frontend` directory:
-   ```
-   cd frontend
-   ```
+3. Set up the backend:
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+pip install -r requirements.txt
+```
 
-2. Install dependencies:
-   ```
-   npm install
-   ```
+4. Set up environment variables:
+```bash
+# Create .env files in both frontend and backend directories
+# See .env.example files for required variables
+```
 
-3. Start the development server:
-   ```
-   npm start
-   ```
+5. Start the development servers:
+```bash
+# Terminal 1 - Frontend
+cd frontend
+npm start
 
-4. Access the application at `http://localhost:3000`
+# Terminal 2 - Backend
+cd backend
+flask run
+```
 
-## Using the System
+## Project Structure
 
-### Creating a Recruiting Sequence
+```
+helix/
+├── frontend/           # React frontend application
+├── backend/           # Flask backend application
+├── docs/             # Documentation
+└── README.md         # Project documentation
+```
 
-1. Start a conversation with the AI agent by entering details about the role
-2. The AI will generate a customized recruiting sequence with multiple steps
-3. You can edit, add, or remove steps in the sequence
-4. Each step includes content and personalization tips
+## Contributing
 
-### Loading Candidate Data
-
-1. Go to the "Candidates" tab
-2. Click "Upload CSV" and select your candidate CSV file
-3. Click "Process" to load the data
-4. The system will display a table of candidates
-
-### Sending Personalized Emails
-
-1. From the Candidates tab, click the email icon next to a candidate
-2. The system will use the template from your sequence
-3. Preview the personalized email
-4. Click "Send Email" to deliver the message
-
-### Best Practices
-
-- Use placeholder variables in your templates: `{name}`, `{role}`, `{experience}`
-- Segment candidates based on experience and job fit
-- Follow up with candidates after initial outreach
-- Track response rates to optimize your sequences
-
-## CSV Format
-
-Your CSV file should include at least the following columns:
-- `name`: Candidate's full name
-- `email`: Candidate's email address
-
-Optional but recommended columns:
-- `role`: Current or target role
-- `experience`: Years of experience
-- `skills`: Key skills or technologies
-- `linkedin`: LinkedIn profile URL
-
-## Email Configuration
-
-For email functionality, you need to configure the following in your `.env` file:
-- `SMTP_SERVER`: Your email server (e.g., smtp.gmail.com)
-- `SMTP_PORT`: Server port (typically 587 for TLS)
-- `SMTP_USERNAME`: Your email address
-- `SMTP_PASSWORD`: Your password or app password
-- `FROM_EMAIL`: The email address to send from
+1. Fork the repository
+2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
 
 ## License
 
-This project is proprietary and confidential. 
+This project is licensed under the MIT License - see the LICENSE file for details.
+
+## Acknowledgments
+
+- Inspired by SellScale's Selix
+- Built with modern AI and web technologies
+- Special thanks to the open-source community 

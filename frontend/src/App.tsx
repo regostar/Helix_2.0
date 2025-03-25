@@ -3,7 +3,7 @@ import { Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import ChatBar from './components/ChatBar';
 import Workspace from './components/Workspace';
 import { useSocket } from './components/SocketContext';
-import { Socket } from 'socket.io-client';
+import { io, Socket } from 'socket.io-client';
 
 // Create theme
 const theme = createTheme({
@@ -47,91 +47,118 @@ interface Sequence {
   steps: SequenceStep[];
 }
 
+// Get backend URL from environment variables
+const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
+
 function App() {
-  const { socket, isConnected, emit } = useSocket();
+  const [socket, setSocket] = useState<Socket | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
   const [messages, setMessages] = useState<Message[]>([]);
   const [sequence, setSequence] = useState<Sequence | null>(null);
   const [socketId, setSocketId] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!socket) return;
+    // Create socket connection using environment variable
+    const newSocket = io(BACKEND_URL);
+    setSocket(newSocket);
 
-    const typedSocket = socket as Socket;
+    // Socket event handlers
+    newSocket.on('connect', () => {
+      setIsConnected(true);
+      console.log('Connected to server');
+    });
 
     // Connection events
-    typedSocket.on('connection_response', (data) => {
+    newSocket.on('connection_response', (data) => {
       setSocketId(data.socket_id);
-      typedSocket.emit('get_chat_history');
+      newSocket.emit('get_chat_history');
     });
 
     // Message response events
-    typedSocket.on('chat_response', (data) => {
+    newSocket.on('chat_response', (data) => {
       try {
+        console.log('Received chat_response:', data);
         const responseData = JSON.parse(data.data);
         
+        console.log('Parsed responseData:', responseData);
+        console.log('Status:', responseData.status);
+        console.log('LLM Response:', responseData.llm_response);
+        console.log('Tool Result:', responseData.tool_result);
+        
         if (responseData.status === 'success') {
-          // Handle sequence updates separately from chat messages
-          if (responseData.action === 'generate_sequence' && responseData.tool_result) {
+          // Handle chat response if present
+          if (responseData.chat_response) {
+            const chatMessage: Message = {
+              id: Date.now().toString(),
+              text: responseData.chat_response,
+              sender: 'ai',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, chatMessage]);
+          }
+
+          // Handle sequence generation
+          if (responseData.llm_response?.action === 'generate_sequence' && responseData.tool_result) {
             try {
+              console.log('Parsing tool_result:', responseData.tool_result);
               const toolResult = JSON.parse(responseData.tool_result);
+              console.log('Parsed sequence data:', toolResult);
+              
               if (toolResult.metadata && toolResult.steps) {
+                console.log('Setting sequence with valid data:', toolResult);
                 setSequence(toolResult);
-                // Use chat_response if available, otherwise use default message
-                const newMessage: Message = {
-                  id: Date.now().toString(),
-                  text: responseData.chat_response || `I've created a recruiting sequence for ${toolResult.metadata.role} position. You can view and edit it in the workspace.`,
-                  sender: 'ai',
-                  timestamp: new Date()
-                };
-                setMessages(prev => [...prev, newMessage]);
+              } else {
+                console.error('Invalid sequence data structure:', toolResult);
               }
             } catch (e) {
-              console.error('Error parsing sequence:', e);
+              console.error('Error parsing sequence data:', e);
             }
-          } 
-          // Handle step refinement messages
-          else if (responseData.action === 'modify_sequence') {
+          }
+          
+          // Handle sequence modification
+          else if (responseData.llm_response?.action === 'modify_sequence' && !responseData.chat_response) {
             const newMessage: Message = {
               id: Date.now().toString(),
-              text: responseData.chat_response || "I've refined the sequence step based on your feedback.",
+              text: "I've refined the sequence step based on your feedback.",
               sender: 'ai',
               timestamp: new Date()
             };
             setMessages(prev => [...prev, newMessage]);
           }
+          
           // Handle other tool results
-          else if (responseData.tool_result) {
+          else if (responseData.tool_result && !responseData.chat_response) {
             const newMessage: Message = {
               id: Date.now().toString(),
-              text: responseData.chat_response || responseData.tool_result,
+              text: responseData.tool_result,
               sender: 'ai',
               timestamp: new Date()
             };
             setMessages(prev => [...prev, newMessage]);
           }
         } else if (responseData.error) {
-          const newMessage: Message = {
+          const errorMessage: Message = {
             id: Date.now().toString(),
-            text: responseData.chat_response || `Error: ${responseData.error}`,
+            text: `Error: ${responseData.error}`,
             sender: 'ai',
             timestamp: new Date()
           };
-          setMessages(prev => [...prev, newMessage]);
+          setMessages(prev => [...prev, errorMessage]);
         }
       } catch (e) {
         console.error('Error processing chat response:', e);
-        const newMessage: Message = {
+        const errorMessage: Message = {
           id: Date.now().toString(),
           text: "I apologize, but I encountered an error processing the response.",
           sender: 'ai',
           timestamp: new Date()
         };
-        setMessages(prev => [...prev, newMessage]);
+        setMessages(prev => [...prev, errorMessage]);
       }
     });
 
     // Chat history events
-    typedSocket.on('chat_history', (data) => {
+    newSocket.on('chat_history', (data) => {
       const formattedMessages = data.data.map((msg: any) => ({
         id: Date.now().toString(),
         text: msg.text,
@@ -142,7 +169,7 @@ function App() {
     });
 
     // Sequence update events
-    typedSocket.on('sequence_updated', (data) => {
+    newSocket.on('sequence_updated', (data) => {
       if (data.data && sequence) {
         setSequence({
           ...sequence,
@@ -152,7 +179,7 @@ function App() {
     });
 
     // Step refinement events
-    typedSocket.on('step_refined', (data) => {
+    newSocket.on('step_refined', (data) => {
       if (data.step_id && data.refined_content && sequence) {
         const updatedSteps = sequence.steps.map(step => 
           step.id === data.step_id 
@@ -176,13 +203,9 @@ function App() {
     });
 
     return () => {
-      typedSocket.off('connection_response');
-      typedSocket.off('chat_response');
-      typedSocket.off('chat_history');
-      typedSocket.off('sequence_updated');
-      typedSocket.off('step_refined');
+      newSocket.close();
     };
-  }, [socket, sequence]);
+  }, []);
 
   const handleSendMessage = (message: string) => {
     if (!isConnected) return;
@@ -197,7 +220,7 @@ function App() {
     setMessages(prev => [...prev, newMessage]);
     
     // Type assertion for the emit function
-    (emit as (event: string, data: any) => boolean)('chat_message', { 
+    (socket as Socket).emit('chat_message', { 
       message,
       current_sequence: sequence?.steps || []
     });
@@ -217,17 +240,20 @@ function App() {
     }
     
     try {
+      // Create an updated sequence with the new steps but keep the original metadata
       const updatedSequence = {
         ...sequence,
         steps: updatedSteps
       };
       
-      console.log("App - Updating sequence state");
+      console.log("App - Updating sequence state with:", updatedSequence);
+      // Update local state
       setSequence(updatedSequence);
       
+      // Send only the steps to the backend as that's what it expects
       console.log("App - Emitting sequence_update event");
       // Type assertion for the emit function
-      (emit as (event: string, data: any) => boolean)('sequence_update', { sequence: updatedSteps });
+      (socket as Socket).emit('sequence_update', { sequence: updatedSteps });
     } catch (error) {
       console.error("App - Error updating sequence:", error);
     }
@@ -236,16 +262,27 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ display: 'flex', height: '100vh' }}>
-        <ChatBar
-          messages={messages}
-          onSendMessage={handleSendMessage}
-          isConnected={isConnected}
-        />
-        <Workspace
-          sequence={sequence}
-          onSequenceUpdate={handleSequenceUpdate}
-        />
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        height: '100vh',
+        overflow: 'hidden'
+      }}>
+        <Box sx={{ 
+          display: 'flex', 
+          flexGrow: 1,
+          overflow: 'hidden'
+        }}>
+          <ChatBar 
+            messages={messages} 
+            onSendMessage={handleSendMessage} 
+            isConnected={isConnected} 
+          />
+          <Workspace 
+            sequence={sequence} 
+            onSequenceUpdate={handleSequenceUpdate} 
+          />
+        </Box>
       </Box>
     </ThemeProvider>
   );

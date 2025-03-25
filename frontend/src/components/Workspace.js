@@ -26,19 +26,36 @@ function Workspace({ sequence, onSequenceUpdate }) {
     personalization_tips: '',
   });
 
+  console.log('Workspace received sequence:', sequence);
+
   useEffect(() => {
+    console.log('Workspace useEffect - sequence changed:', sequence);
     // Parse the sequence if it's a string
     if (typeof sequence === 'string') {
       try {
+        console.log('Parsing string sequence');
         const parsed = JSON.parse(sequence);
+        console.log('Parsed sequence:', parsed);
+        
+        // Handle the nested structure
         if (parsed.tool_result) {
-          setParsedSequence(JSON.parse(parsed.tool_result));
+          console.log('Found tool_result, parsing:', parsed.tool_result);
+          const toolResult = JSON.parse(parsed.tool_result);
+          setParsedSequence(toolResult);
+        } else if (parsed.metadata && parsed.steps) {
+          console.log('Found direct sequence data');
+          setParsedSequence(parsed);
+        } else {
+          console.error('Invalid sequence data structure:', parsed);
         }
       } catch (e) {
-        console.error('Error parsing sequence:', e);
+        console.error('Error parsing sequence:', e, 'Raw sequence:', sequence);
       }
-    } else {
+    } else if (sequence && typeof sequence === 'object') {
+      console.log('Using object sequence directly:', sequence);
       setParsedSequence(sequence);
+    } else {
+      console.log('No sequence data received');
     }
   }, [sequence]);
 
@@ -72,21 +89,44 @@ function Workspace({ sequence, onSequenceUpdate }) {
   const handleSaveStep = () => {
     if (!newStep.content) return;
 
-    const updatedSteps = editingStep
-      ? parsedSequence.steps.map((step) =>
-          step.id === editingStep.id
-            ? { ...newStep, id: step.id }
-            : step
-        )
-      : [...(parsedSequence?.steps || []), { ...newStep, id: Date.now().toString() }];
+    let updatedSteps;
+    if (editingStep) {
+      updatedSteps = parsedSequence.steps.map((step) =>
+        step.id === editingStep.id ? { ...newStep, id: step.id } : step
+      );
+    } else {
+      updatedSteps = [...(parsedSequence?.steps || []), { ...newStep, id: Date.now().toString() }];
+    }
 
-    const updatedSequence = {
-      ...parsedSequence,
-      steps: updatedSteps,
-    };
+    // Call the parent's onSequenceUpdate with the updated steps
+    if (typeof onSequenceUpdate === 'function') {
+      try {
+        onSequenceUpdate(updatedSteps);
+        console.log('Sequence updated with new steps:', updatedSteps);
+      } catch (error) {
+        console.error('Error updating sequence:', error);
+      }
+    } else {
+      console.warn('onSequenceUpdate is not provided or not a function');
+    }
 
-    onSequenceUpdate(updatedSequence);
     handleCloseDialog();
+  };
+
+  const handleStepUpdate = (updatedSteps) => {
+    console.log('Workspace received step update:', updatedSteps);
+    
+    // Call the parent's onSequenceUpdate with the updated steps
+    if (typeof onSequenceUpdate === 'function') {
+      try {
+        onSequenceUpdate(updatedSteps);
+        console.log('Sequence updated through SequenceDisplay');
+      } catch (error) {
+        console.error('Error updating sequence from SequenceDisplay:', error);
+      }
+    } else {
+      console.warn('onSequenceUpdate is not provided or not a function');
+    }
   };
 
   return (
@@ -103,7 +143,9 @@ function Workspace({ sequence, onSequenceUpdate }) {
           </Button>
         </Box>
 
-        {parsedSequence && <SequenceDisplay sequence={parsedSequence} />}
+        {parsedSequence && (
+          <SequenceDisplay sequence={parsedSequence} onStepUpdate={handleStepUpdate} />
+        )}
       </Paper>
 
       <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>

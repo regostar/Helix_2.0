@@ -68,7 +68,6 @@ class RecruitingAgent:
         self.smtp_password = os.getenv("SMTP_PASSWORD", "")
         self.from_email = os.getenv("FROM_EMAIL", "")
         self.candidate_data = []
-        self.chat_history = []
 
     def _get_tools(self) -> List[Tool]:
         return [
@@ -491,121 +490,140 @@ Do not include any other text before or after the JSON array."""
         except Exception as e:
             return json.dumps({"error": f"Failed to merge candidate data: {str(e)}"})
 
-    def process_message(self, message: str, chat_history: List[Dict] = None, current_sequence: List[Dict] = None) -> Dict:
+    def process_message(self, message: str, chat_history: List[Dict], current_sequence: List[Dict]) -> str:
         """Process a user message and return a response.
         
-        Args:
-            message (str): The user's message
-            chat_history (List[Dict], optional): List of previous chat messages. Defaults to None.
-            current_sequence (List[Dict], optional): Current recruiting sequence. Defaults to None.
-            
         Returns:
-            Dict: Response containing status, LLM response, tool result, and chat response
+            str: A JSON string containing the LLM response and tool result
         """
         try:
-            # Update chat history if provided
-            if chat_history is not None:
-                self.chat_history = chat_history
-
-            # Convert chat history to LangChain message format
-            formatted_chat_history = []
-            for msg in self.chat_history:
-                if msg["sender"] == "user":
-                    formatted_chat_history.append(HumanMessage(content=msg["text"]))
-                else:
-                    formatted_chat_history.append(SystemMessage(content=msg["text"]))
-
+            # Format the chat history into messages
+            formatted_chat_history = [
+                HumanMessage(content=msg["text"]) if msg["sender"] == "user" 
+                else SystemMessage(content=msg["text"])
+                for msg in chat_history
+            ]
+            
             # Format the sequence
-            sequence = self._format_sequence(current_sequence) if current_sequence else "No current sequence."
-
-            # Create the prompt with the current message
-            prompt = self.prompt.format_messages(
-                chat_history=formatted_chat_history,
-                current_sequence=sequence,
-                input=message
-            )
-
-            # Get the LLM response
-            response = self.llm.invoke(prompt)
+            formatted_sequence = self._format_sequence(current_sequence)
             
-            # Parse the response
-            try:
-                # First try to parse as JSON
-                llm_response = response.content.strip()
-                try:
-                    json_response = json.loads(llm_response)
-                    if isinstance(json_response, dict) and "action" in json_response and "action_input" in json_response:
-                        parsed_response = json_response
-                    else:
-                        raise ValueError("Response missing required fields")
-                except (json.JSONDecodeError, ValueError) as e:
-                    # If direct JSON parsing fails, try using the output parser
-                    parsed_response = self.output_parser.parse(llm_response)
-                    
-            except Exception as e:
-                print(f"Error parsing LLM response: {e}")
-                print(f"Raw response: {response}")
-                return {
-                    "status": "error",
-                    "error": "Failed to parse LLM response",
-                    "chat_response": "I apologize, but I couldn't understand your request. Could you please rephrase it?"
-                }
-
-            # Get the tool result
-            tool_result = None
-            chat_response = None
-
-            if parsed_response["action"] == "generate_sequence":
-                tool_result = self._generate_sequence(parsed_response["action_input"])
-                try:
-                    # Parse the tool result to get metadata for the chat response
-                    parsed_tool_result = json.loads(tool_result) if isinstance(tool_result, str) else tool_result
-                    if "metadata" in parsed_tool_result:
-                        chat_response = f"I've created a recruiting sequence for a {parsed_tool_result['metadata']['seniority']} {parsed_tool_result['metadata']['role']} position in the {parsed_tool_result['metadata']['industry']} industry. Please review it and let me know if you'd like to make any changes."
-                    else:
-                        chat_response = "I've created a recruiting sequence based on your requirements. Please review it and let me know if you'd like to make any changes."
-                except json.JSONDecodeError:
-                    chat_response = "I've created a recruiting sequence based on your requirements. Please review it and let me know if you'd like to make any changes."
-            
-            elif parsed_response["action"] == "modify_sequence":
-                if current_sequence:
-                    tool_result = self._modify_sequence(current_sequence, parsed_response["action_input"])
-                    chat_response = "I've updated the sequence based on your feedback. Would you like to make any other adjustments to the messaging or timing?"
-                else:
-                    return {
-                        "status": "error",
-                        "error": "No sequence to modify",
-                        "chat_response": "I don't see any sequence to modify. Would you like me to create a new one?"
-                    }
-            
-            elif parsed_response["action"] == "ask_clarifying_question":
-                chat_response = parsed_response["action_input"]
-                tool_result = None
-            
-            elif parsed_response["action"] == "provide_feedback":
-                chat_response = "Thank you for your feedback. I'll take it into account for future interactions."
-                tool_result = None
-
-            # Prepare the response
-            response_data = {
-                "status": "success",
-                "llm_response": json.dumps(parsed_response),
-                "tool_result": tool_result if isinstance(tool_result, str) else json.dumps(tool_result) if tool_result else None,
-                "chat_response": chat_response,
-                "error": None
+            # Create the prompt variables
+            prompt_variables = {
+                "chat_history": formatted_chat_history,
+                "input": message,
+                "current_sequence": formatted_sequence,
+                "tools": "\n".join(t.description for t in self.tools),
+                "tool_names": ", ".join(t.name for t in self.tools)
             }
 
-            # Update chat history
-            self.chat_history.append({"role": "user", "content": message})
-            if chat_response:
-                self.chat_history.append({"role": "assistant", "content": chat_response})
+            # Get the response using the prompt template
+            response = self.llm(self.prompt.format_messages(**prompt_variables))
+            llm_response = response.content.strip()
+            
+            # Try to parse as JSON first
+            try:
+                json_response = json.loads(llm_response)
+                if isinstance(json_response, dict) and "action" in json_response and "action_input" in json_response:
+                    parsed_response = json_response
+                else:
+                    raise ValueError("Response missing required fields")
+            except (json.JSONDecodeError, ValueError) as e:
+                # If direct JSON parsing fails, try using the output parser
+                parsed_response = self.output_parser.parse(llm_response)
+            
+            tool_name = parsed_response["action"]
+            tool_input = parsed_response["action_input"]
+            
+            # Find the matching tool
+            tool = next((t for t in self.tools if t.name == tool_name), None)
+            if tool is None:
+                return json.dumps({
+                    "status": "error",
+                    "llm_response": llm_response,
+                    "error": f"Tool '{tool_name}' not found",
+                    "tool_result": None,
+                    "chat_response": f"I apologize, but I encountered an error processing your request."
+                })
+            
+            # Execute the tool
+            tool_result = tool.func(tool_input)
 
-            return response_data
+            # Generate appropriate chat response based on the tool and result
+            chat_response = ""
+            if tool_name == "generate_sequence":
+                try:
+                    sequence_data = json.loads(tool_result)
+                    if "metadata" in sequence_data:
+                        chat_response = f"I've created a recruiting sequence for a {sequence_data['metadata']['role']} position. Please review it and let me know if you'd like any changes."
+                    else:
+                        chat_response = "I've created a recruiting sequence based on your requirements. Please review it and let me know if you'd like any changes."
+                except:
+                    chat_response = "I've created a recruiting sequence based on your requirements. Please review it and let me know if you'd like any changes."
+            elif tool_name == "ask_clarifying_question":
+                chat_response = tool_input
+            elif tool_name == "modify_sequence":
+                chat_response = "I've modified the sequence based on your feedback. Please review the changes and let me know if you'd like any further adjustments."
+            elif tool_name == "provide_feedback":
+                chat_response = tool_result
+            else:
+                chat_response = "I've processed your request. Is there anything specific you'd like me to explain or modify?"
 
+            return json.dumps({
+                "status": "success",
+                "llm_response": parsed_response,
+                "tool_result": tool_result,
+                "chat_response": chat_response,
+                "error": None
+            })
+                
         except Exception as e:
-            print(f"Error in process_message: {e}")
-            return {
-                "status": "error",
-                "error": str(e),
-                "chat_response": "I encountered an error while processing your request. Could you please try again or rephrase your message?"
-            } 
+            # If we get here, both JSON parsing and output parser failed
+            retry_message = """Your last response was not in the correct format. Please respond ONLY with a JSON object like this:
+            {
+                "action": "tool_name",
+                "action_input": "input for the tool"
+            }
+            No other text should be included."""
+            
+            # Try one more time with the retry message
+            try:
+                prompt_variables["input"] = retry_message
+                retry_response = self.llm(self.prompt.format_messages(**prompt_variables))
+                retry_llm_response = retry_response.content.strip()
+                
+                parsed_retry = json.loads(retry_llm_response)
+                tool_name = parsed_retry["action"]
+                tool_input = parsed_retry["action_input"]
+                
+                tool = next((t for t in self.tools if t.name == tool_name), None)
+                if tool is None:
+                    return json.dumps({
+                        "status": "error",
+                        "llm_response": retry_llm_response,
+                        "error": f"Tool '{tool_name}' not found",
+                        "tool_result": None,
+                        "chat_response": "I apologize, but I encountered an error processing your request."
+                    })
+                
+                tool_result = tool.func(tool_input)
+
+                # Generate chat response for retry case
+                chat_response = "I've processed your request after a small hiccup. Is there anything specific you'd like me to explain or modify?"
+
+                return json.dumps({
+                    "status": "success",
+                    "llm_response": parsed_retry,
+                    "tool_result": tool_result,
+                    "chat_response": chat_response,
+                    "error": None
+                })
+                
+            except Exception as retry_error:
+                return json.dumps({
+                    "status": "error",
+                    "llm_response": llm_response,
+                    "retry_response": retry_llm_response if 'retry_llm_response' in locals() else None,
+                    "error": str(retry_error),
+                    "tool_result": None,
+                    "chat_response": "I apologize, but I encountered an error processing your request. Could you please try rephrasing your message?"
+                }) 

@@ -94,8 +94,7 @@ def handle_chat_message(data):
         # Parse the JSON response to extract relevant information for the user
         display_message = response
         try:
-            response_data = response
-            # response_data = json.loads(response)
+            response_data = json.loads(response)
             if response_data.get("status") == "success" and response_data.get("tool_result"):
                 # Extract just the tool result for display
                 display_message = response_data["tool_result"]
@@ -210,8 +209,9 @@ def handle_process_edit(data):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
+    port = int(os.getenv('PORT', 5000))
     socketio.run(app, 
                 host='0.0.0.0', 
-                port=5000, 
+                port=port, 
                 debug=True,
                 allow_unsafe_werkzeug=True) 

@@ -37,19 +37,55 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
   const textFieldRef = useRef(null);
   const { socket, isConnected, emit } = useSocket();
 
+  console.log('SequenceDisplay rendered with sequence:', sequence);
+
   // Initialize editableSteps whenever sequence changes
   useEffect(() => {
     if (sequence && sequence.steps) {
+      console.log('SequenceDisplay - sequence changed, steps:', sequence.steps);
       const initialEditableSteps = {};
       sequence.steps.forEach(step => {
         initialEditableSteps[step.id] = step.content;
       });
       setEditableSteps(initialEditableSteps);
-      console.log('SequenceDisplay - Initialized editable steps');
+      console.log('SequenceDisplay - Initialized editable steps:', initialEditableSteps);
+    } else {
+      console.warn('SequenceDisplay - Received invalid sequence data:', sequence);
     }
   }, [sequence]);
 
-  if (!sequence || !sequence.steps) return null;
+  if (!sequence) {
+    console.warn('SequenceDisplay - No sequence provided');
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography variant="body1" color="textSecondary">
+          No sequence data available. Create a new sequence to get started.
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (!sequence.steps || !Array.isArray(sequence.steps) || sequence.steps.length === 0) {
+    console.warn('SequenceDisplay - No steps in sequence:', sequence);
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography variant="body1" color="textSecondary">
+          This sequence doesn't have any steps yet. Add some steps to get started.
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (!sequence.metadata) {
+    console.warn('SequenceDisplay - No metadata in sequence:', sequence);
+    return (
+      <Box sx={{ p: 4, textAlign: 'center' }}>
+        <Typography variant="body1" color="textSecondary">
+          Sequence is missing metadata. Please regenerate the sequence.
+        </Typography>
+      </Box>
+    );
+  }
 
   const showSnackbar = (message, severity = 'info') => {
     setSnackbarMessage(message);
