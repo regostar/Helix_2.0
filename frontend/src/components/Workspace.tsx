@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Paper,
@@ -28,14 +28,19 @@ import {
   Select,
   FormControl,
   InputLabel,
+  Collapse,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import EditIcon from '@mui/icons-material/Edit';
 import DeleteIcon from '@mui/icons-material/Delete';
+import SaveIcon from '@mui/icons-material/Save';
+import CancelIcon from '@mui/icons-material/Cancel';
 import AccessTimeIcon from '@mui/icons-material/AccessTime';
 import UploadFileIcon from '@mui/icons-material/UploadFile';
 import EmailIcon from '@mui/icons-material/Email';
 import LinkedIn from '@mui/icons-material/LinkedIn';
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
+import SequenceDisplay from './SequenceDisplay';
 
 interface SequenceStep {
   id: string;
@@ -100,6 +105,12 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
+// Add a new interface for editable step
+interface EditableStep extends SequenceStep {
+  isEditing?: boolean;
+  originalContent?: string;
+}
+
 const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => {
   const [tabValue, setTabValue] = useState(0);
   const [openDialog, setOpenDialog] = useState(false);
@@ -116,6 +127,15 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
   const [emailTemplate, setEmailTemplate] = useState('');
   const [selectedCandidate, setSelectedCandidate] = useState<Candidate | null>(null);
   const [openEmailDialog, setOpenEmailDialog] = useState(false);
+  const [editableSteps, setEditableSteps] = useState<EditableStep[]>([]);
+  const contentInputRef = useRef<HTMLInputElement>(null);
+
+  // Update editableSteps when sequence changes
+  useEffect(() => {
+    if (sequence) {
+      setEditableSteps(sequence.steps.map(step => ({ ...step, isEditing: false })));
+    }
+  }, [sequence]);
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
@@ -240,6 +260,89 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
     return personalized;
   };
 
+  const handleToggleEditing = (id: string) => {
+    setEditableSteps(prevSteps => 
+      prevSteps.map(step => 
+        step.id === id 
+          ? { ...step, isEditing: !step.isEditing, originalContent: step.content } 
+          : step
+      )
+    );
+    // Focus on the input field after a short delay
+    setTimeout(() => {
+      if (contentInputRef.current) {
+        contentInputRef.current.focus();
+      }
+    }, 100);
+  };
+
+  const handleStepContentChange = (id: string, content: string) => {
+    setEditableSteps(prevSteps => 
+      prevSteps.map(step => 
+        step.id === id ? { ...step, content } : step
+      )
+    );
+  };
+
+  const handleSaveStepEdit = (id: string) => {
+    const updatedStep = editableSteps.find(step => step.id === id);
+    if (!updatedStep || !sequence) return;
+
+    // Update the sequence steps
+    const updatedSteps = sequence.steps.map(step => 
+      step.id === id ? { ...step, content: updatedStep.content } : step
+    );
+
+    // Send the updated sequence to the backend
+    onSequenceUpdate(updatedSteps);
+
+    // Turn off editing mode
+    setEditableSteps(prevSteps => 
+      prevSteps.map(step => 
+        step.id === id ? { ...step, isEditing: false } : step
+      )
+    );
+
+    // Emit a Socket.io event for real-time processing with the LLM
+    if ((window as any).socket) {
+      (window as any).socket.emit('process_edit', { 
+        step_id: id, 
+        content: updatedStep.content,
+        request: "Refine this step based on the edits to make it more effective"
+      });
+    }
+  };
+
+  const handleCancelStepEdit = (id: string) => {
+    setEditableSteps(prevSteps => 
+      prevSteps.map(step => 
+        step.id === id && step.originalContent 
+          ? { ...step, isEditing: false, content: step.originalContent } 
+          : step.id === id 
+          ? { ...step, isEditing: false } 
+          : step
+      )
+    );
+  };
+
+  // Add a function to handle step updates from SequenceDisplay
+  const handleStepUpdate = (updatedSteps: SequenceStep[]) => {
+    if (!sequence) return;
+    console.log("Workspace - Handling step update:", updatedSteps);
+    
+    // Pass the updated steps to the parent component
+    if (typeof onSequenceUpdate === 'function') {
+      try {
+        onSequenceUpdate(updatedSteps);
+        console.log("Workspace - onSequenceUpdate called successfully");
+      } catch (error) {
+        console.error("Workspace - Error calling onSequenceUpdate:", error);
+      }
+    } else {
+      console.warn("Workspace - onSequenceUpdate is not a function");
+    }
+  };
+
   // Render empty state if no sequence
   if (!sequence) {
     return (
@@ -283,57 +386,11 @@ const Workspace: React.FC<WorkspaceProps> = ({ sequence, onSequenceUpdate }) => 
             </Button>
           </Box>
 
-          <List>
-            {sequence.steps.map((step, index) => (
-              <React.Fragment key={step.id}>
-                <ListItem>
-                  <ListItemText
-                    primary={
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                        <Typography variant="subtitle1">
-                          Step {index + 1}: {step.type}
-                        </Typography>
-                        {step.delay > 0 && (
-                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                            <AccessTimeIcon fontSize="small" />
-                            <Typography variant="caption">
-                              {step.delay} days
-                            </Typography>
-                          </Box>
-                        )}
-                      </Box>
-                    }
-                    secondary={
-                      <Box>
-                        <Typography variant="body2">{step.content}</Typography>
-                        {step.personalization_tips && (
-                          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 1 }}>
-                            Personalization Tips: {step.personalization_tips}
-                          </Typography>
-                        )}
-                      </Box>
-                    }
-                  />
-                  <ListItemSecondaryAction>
-                    <IconButton
-                      edge="end"
-                      onClick={() => handleOpenDialog(step)}
-                      sx={{ mr: 1 }}
-                    >
-                      <EditIcon />
-                    </IconButton>
-                    <IconButton
-                      edge="end"
-                      onClick={() => handleDeleteStep(step.id)}
-                    >
-                      <DeleteIcon />
-                    </IconButton>
-                  </ListItemSecondaryAction>
-                </ListItem>
-                {index < sequence.steps.length - 1 && <Divider />}
-              </React.Fragment>
-            ))}
-          </List>
+          {/* Pass the handleStepUpdate function to SequenceDisplay */}
+          <SequenceDisplay 
+            sequence={sequence} 
+            onStepUpdate={handleStepUpdate} 
+          />
         </Paper>
       </TabPanel>
       

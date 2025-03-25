@@ -1,20 +1,81 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Box,
-  Paper,
   TextField,
   IconButton,
+  Paper,
   Typography,
   Avatar,
   Divider,
   Tooltip,
+  Fade,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
-import WifiIcon from '@mui/icons-material/Wifi';
-import WifiOffIcon from '@mui/icons-material/WifiOff';
+import SmartToyIcon from '@mui/icons-material/SmartToy';
+import PersonIcon from '@mui/icons-material/Person';
+import { styled } from '@mui/material/styles';
 
-function ChatBar({ messages, onSendMessage, isConnected }) {
-  const [input, setInput] = useState('');
+const ChatContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexDirection: 'column',
+  height: '100%',
+  width: '100%',
+  backgroundColor: theme.palette.background.default,
+}));
+
+const MessagesContainer = styled(Box)(({ theme }) => ({
+  flex: 1,
+  overflow: 'auto',
+  padding: theme.spacing(2),
+  display: 'flex',
+  flexDirection: 'column',
+  gap: theme.spacing(2),
+}));
+
+const MessageBubble = styled(Paper)(({ theme, isUser }) => ({
+  padding: theme.spacing(2),
+  maxWidth: '80%',
+  alignSelf: isUser ? 'flex-end' : 'flex-start',
+  backgroundColor: isUser ? theme.palette.primary.main : theme.palette.grey[100],
+  color: isUser ? theme.palette.primary.contrastText : theme.palette.text.primary,
+  borderRadius: theme.spacing(2),
+  position: 'relative',
+  '&:before': {
+    content: '""',
+    position: 'absolute',
+    top: '50%',
+    [isUser ? 'right' : 'left']: -8,
+    transform: 'translateY(-50%)',
+    border: `8px solid transparent`,
+    borderRightColor: isUser ? theme.palette.primary.main : theme.palette.grey[100],
+    [isUser ? 'borderRightColor' : 'borderLeftColor']: isUser ? theme.palette.primary.main : theme.palette.grey[100],
+  },
+}));
+
+const InputContainer = styled(Box)(({ theme }) => ({
+  padding: theme.spacing(2),
+  borderTop: `1px solid ${theme.palette.divider}`,
+  backgroundColor: theme.palette.background.paper,
+  display: 'flex',
+  alignItems: 'center',
+  gap: theme.spacing(1),
+}));
+
+const MessageHeader = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  alignItems: 'center',
+  gap: theme.spacing(1),
+  marginBottom: theme.spacing(1),
+}));
+
+const MessageTime = styled(Typography)(({ theme }) => ({
+  fontSize: '0.75rem',
+  color: theme.palette.text.secondary,
+  marginTop: theme.spacing(0.5),
+}));
+
+const ChatBar = ({ messages, onSendMessage, isConnected }) => {
+  const [message, setMessage] = useState('');
   const messagesEndRef = useRef(null);
 
   const scrollToBottom = () => {
@@ -27,103 +88,74 @@ function ChatBar({ messages, onSendMessage, isConnected }) {
 
   const handleSubmit = (e) => {
     e.preventDefault();
-    if (input.trim() && isConnected) {
-      onSendMessage(input.trim());
-      setInput('');
+    if (message.trim() && isConnected) {
+      onSendMessage(message.trim());
+      setMessage('');
     }
   };
 
   return (
-    <Paper
-      sx={{
-        width: '400px',
-        height: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        borderRight: '1px solid',
-        borderColor: 'divider',
-      }}
-    >
-      {/* Header */}
-      <Box sx={{ p: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
-          Helix Recruiter
-        </Typography>
-        <Tooltip title={isConnected ? 'Connected' : 'Disconnected'}>
-          {isConnected ? <WifiIcon color="success" /> : <WifiOffIcon color="error" />}
-        </Tooltip>
-      </Box>
-      <Divider />
-
-      {/* Messages */}
-      <Box
-        sx={{
-          flexGrow: 1,
-          overflow: 'auto',
-          p: 2,
-          display: 'flex',
-          flexDirection: 'column',
-          gap: 2,
-        }}
-      >
-        {messages.map((message) => (
-          <Box
-            key={message.id}
-            sx={{
-              display: 'flex',
-              gap: 1,
-              alignItems: 'flex-start',
-              flexDirection: message.sender === 'user' ? 'row-reverse' : 'row',
-            }}
-          >
-            <Avatar
-              sx={{
-                bgcolor: message.sender === 'user' ? 'primary.main' : 'secondary.main',
-              }}
-            >
-              {message.sender === 'user' ? 'U' : 'H'}
-            </Avatar>
-            <Paper
-              sx={{
-                p: 1.5,
-                maxWidth: '70%',
-                bgcolor: message.sender === 'user' ? 'primary.light' : 'grey.100',
-                color: message.sender === 'user' ? 'primary.contrastText' : 'text.primary',
-              }}
-            >
-              <Typography variant="body1">{message.text}</Typography>
-              <Typography variant="caption" sx={{ display: 'block', mt: 0.5 }}>
-                {new Date(message.timestamp).toLocaleTimeString()}
-              </Typography>
-            </Paper>
-          </Box>
+    <ChatContainer>
+      <MessagesContainer>
+        {messages.map((msg) => (
+          <Fade in={true} key={msg.id}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+              <MessageHeader>
+                <Avatar sx={{ width: 32, height: 32, bgcolor: msg.sender === 'user' ? 'primary.main' : 'secondary.main' }}>
+                  {msg.sender === 'user' ? <PersonIcon /> : <SmartToyIcon />}
+                </Avatar>
+                <Typography variant="subtitle2" sx={{ fontWeight: 'bold' }}>
+                  {msg.sender === 'user' ? 'You' : 'AI Assistant'}
+                </Typography>
+              </MessageHeader>
+              <MessageBubble isUser={msg.sender === 'user'}>
+                <Typography variant="body1">{msg.text}</Typography>
+                <MessageTime>
+                  {new Date(msg.timestamp).toLocaleTimeString([], { 
+                    hour: '2-digit', 
+                    minute: '2-digit' 
+                  })}
+                </MessageTime>
+              </MessageBubble>
+            </Box>
+          </Fade>
         ))}
         <div ref={messagesEndRef} />
-      </Box>
+      </MessagesContainer>
       <Divider />
-
-      {/* Input */}
-      <Box component="form" onSubmit={handleSubmit} sx={{ p: 2 }}>
-        <Box sx={{ display: 'flex', gap: 1 }}>
+      <form onSubmit={handleSubmit}>
+        <InputContainer>
           <TextField
             fullWidth
             variant="outlined"
-            placeholder="Type your message..."
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
+            placeholder={isConnected ? "Type your message..." : "Connecting..."}
+            value={message}
+            onChange={(e) => setMessage(e.target.value)}
             disabled={!isConnected}
+            size="small"
           />
-          <IconButton
-            type="submit"
-            color="primary"
-            disabled={!input.trim() || !isConnected}
-          >
-            <SendIcon />
-          </IconButton>
-        </Box>
-      </Box>
-    </Paper>
+          <Tooltip title={isConnected ? "Send message" : "Connecting..."}>
+            <span>
+              <IconButton 
+                color="primary" 
+                type="submit" 
+                disabled={!message.trim() || !isConnected}
+                sx={{ 
+                  backgroundColor: 'primary.main',
+                  color: 'primary.contrastText',
+                  '&:hover': {
+                    backgroundColor: 'primary.dark',
+                  },
+                }}
+              >
+                <SendIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+        </InputContainer>
+      </form>
+    </ChatContainer>
   );
-}
+};
 
 export default ChatBar; 

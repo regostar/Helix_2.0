@@ -7,6 +7,7 @@ from agent import RecruitingAgent
 import os
 import json
 from datetime import datetime, UTC
+from langchain.schema import HumanMessage
 
 # Load environment variables
 load_dotenv()
@@ -93,7 +94,8 @@ def handle_chat_message(data):
         # Parse the JSON response to extract relevant information for the user
         display_message = response
         try:
-            response_data = json.loads(response)
+            response_data = response
+            # response_data = json.loads(response)
             if response_data.get("status") == "success" and response_data.get("tool_result"):
                 # Extract just the tool result for display
                 display_message = response_data["tool_result"]
@@ -166,6 +168,44 @@ def handle_get_chat_history():
     except Exception as e:
         print(f"Error retrieving chat history: {str(e)}")
         emit('error', {'data': f"Error retrieving chat history: {str(e)}"})
+
+@socketio.on('process_edit')
+def handle_process_edit(data):
+    try:
+        step_id = data.get('step_id', '')
+        content = data.get('content', '')
+        request_text = data.get('request', 'Refine this step')
+        
+        # Get chat history for this connection
+        chat_history = ChatHistory.get_or_create(request.sid)
+        
+        print(f"Processing edit from {request.sid} for step {step_id}")
+        
+        # Create a prompt for the LLM to refine the step
+        refinement_prompt = f"""
+        Please refine this recruiting sequence step based on the following request:
+        
+        Request: {request_text}
+        
+        Current content: {content}
+        
+        Please improve this message while maintaining its purpose and key information.
+        Return ONLY the improved message text without any explanations.
+        """
+        
+        # Process with the LLM
+        response = agent.llm([HumanMessage(content=refinement_prompt)])
+        refined_content = response.content.strip()
+        
+        # Send back the refined content
+        emit('step_refined', {
+            'step_id': step_id,
+            'refined_content': refined_content,
+            'message': 'I\'ve refined your message to be more effective.'
+        })
+    except Exception as e:
+        print(f"Error in handle_process_edit: {str(e)}")
+        emit('error', {'data': f"Error processing edit: {str(e)}"})
 
 if __name__ == '__main__':
     with app.app_context():

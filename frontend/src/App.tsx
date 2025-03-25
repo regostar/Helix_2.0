@@ -2,7 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
 import ChatBar from './components/ChatBar';
 import Workspace from './components/Workspace';
-import { io, Socket } from 'socket.io-client';
+import { useSocket } from './components/SocketContext';
+import { Socket } from 'socket.io-client';
 
 // Create theme
 const theme = createTheme({
@@ -47,80 +48,81 @@ interface Sequence {
 }
 
 function App() {
-  const [socket, setSocket] = useState<Socket | null>(null);
+  const { socket, isConnected, emit } = useSocket();
   const [messages, setMessages] = useState<Message[]>([]);
   const [sequence, setSequence] = useState<Sequence | null>(null);
-  const [isConnected, setIsConnected] = useState(false);
   const [socketId, setSocketId] = useState<string | null>(null);
 
   useEffect(() => {
-    const newSocket = io('http://localhost:5000');
-    setSocket(newSocket);
+    if (!socket) return;
 
-    newSocket.on('connect', () => {
-      setIsConnected(true);
-    });
+    const typedSocket = socket as Socket;
 
-    newSocket.on('connection_response', (data) => {
+    // Connection events
+    typedSocket.on('connection_response', (data) => {
       setSocketId(data.socket_id);
-      newSocket.emit('get_chat_history');
+      typedSocket.emit('get_chat_history');
     });
 
-    newSocket.on('disconnect', () => {
-      setIsConnected(false);
-      setSocketId(null);
-    });
-
-    newSocket.on('chat_response', (data) => {
+    // Message response events
+    typedSocket.on('chat_response', (data) => {
       try {
-        // Parse the response JSON
         const responseData = JSON.parse(data.data);
         
-        // Extract the readable message to display to the user
-        let displayText = '';
-        
         if (responseData.status === 'success') {
-          // For successful responses, show only the tool_result (the actual message to the user)
-          if (responseData.tool_result) {
-            // Check if tool_result is a JSON string (like a sequence)
+          // Handle sequence updates separately from chat messages
+          if (responseData.action === 'generate_sequence' && responseData.tool_result) {
             try {
               const toolResult = JSON.parse(responseData.tool_result);
               if (toolResult.metadata && toolResult.steps) {
                 setSequence(toolResult);
-                displayText = "I've created a recruiting sequence based on your requirements.";
-              } else {
-                // Not a sequence, but still JSON - use it directly
-                displayText = responseData.tool_result;
+                // Use chat_response if available, otherwise use default message
+                const newMessage: Message = {
+                  id: Date.now().toString(),
+                  text: responseData.chat_response || `I've created a recruiting sequence for ${toolResult.metadata.role} position. You can view and edit it in the workspace.`,
+                  sender: 'ai',
+                  timestamp: new Date()
+                };
+                setMessages(prev => [...prev, newMessage]);
               }
             } catch (e) {
-              // Not JSON, use the tool_result directly
-              displayText = responseData.tool_result;
+              console.error('Error parsing sequence:', e);
             }
-          } else {
-            displayText = "Request processed successfully.";
+          } 
+          // Handle step refinement messages
+          else if (responseData.action === 'modify_sequence') {
+            const newMessage: Message = {
+              id: Date.now().toString(),
+              text: responseData.chat_response || "I've refined the sequence step based on your feedback.",
+              sender: 'ai',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, newMessage]);
+          }
+          // Handle other tool results
+          else if (responseData.tool_result) {
+            const newMessage: Message = {
+              id: Date.now().toString(),
+              text: responseData.chat_response || responseData.tool_result,
+              sender: 'ai',
+              timestamp: new Date()
+            };
+            setMessages(prev => [...prev, newMessage]);
           }
         } else if (responseData.error) {
-          // For error responses, show the error message
-          displayText = `Error: ${responseData.error}`;
-        } else {
-          // Default case - use original text
-          displayText = data.data;
+          const newMessage: Message = {
+            id: Date.now().toString(),
+            text: responseData.chat_response || `Error: ${responseData.error}`,
+            sender: 'ai',
+            timestamp: new Date()
+          };
+          setMessages(prev => [...prev, newMessage]);
         }
-        
-        // Add the message to chat
-        const newMessage: Message = {
-          id: Date.now().toString(),
-          text: displayText,
-          sender: 'ai',
-          timestamp: new Date()
-        };
-        setMessages(prev => [...prev, newMessage]);
-        
       } catch (e) {
-        // If we can't parse the response, just show the raw text
+        console.error('Error processing chat response:', e);
         const newMessage: Message = {
           id: Date.now().toString(),
-          text: data.data,
+          text: "I apologize, but I encountered an error processing the response.",
           sender: 'ai',
           timestamp: new Date()
         };
@@ -128,7 +130,8 @@ function App() {
       }
     });
 
-    newSocket.on('chat_history', (data) => {
+    // Chat history events
+    typedSocket.on('chat_history', (data) => {
       const formattedMessages = data.data.map((msg: any) => ({
         id: Date.now().toString(),
         text: msg.text,
@@ -138,7 +141,8 @@ function App() {
       setMessages(formattedMessages);
     });
 
-    newSocket.on('sequence_updated', (data) => {
+    // Sequence update events
+    typedSocket.on('sequence_updated', (data) => {
       if (data.data && sequence) {
         setSequence({
           ...sequence,
@@ -147,13 +151,41 @@ function App() {
       }
     });
 
+    // Step refinement events
+    typedSocket.on('step_refined', (data) => {
+      if (data.step_id && data.refined_content && sequence) {
+        const updatedSteps = sequence.steps.map(step => 
+          step.id === data.step_id 
+            ? { ...step, content: data.refined_content }
+            : step
+        );
+        
+        setSequence({
+          ...sequence,
+          steps: updatedSteps
+        });
+        
+        const newMessage: Message = {
+          id: Date.now().toString(),
+          text: "I've refined the sequence step based on your feedback.",
+          sender: 'ai',
+          timestamp: new Date()
+        };
+        setMessages(prev => [...prev, newMessage]);
+      }
+    });
+
     return () => {
-      newSocket.close();
+      typedSocket.off('connection_response');
+      typedSocket.off('chat_response');
+      typedSocket.off('chat_history');
+      typedSocket.off('sequence_updated');
+      typedSocket.off('step_refined');
     };
-  }, []);
+  }, [socket, sequence]);
 
   const handleSendMessage = (message: string) => {
-    if (!socket || !isConnected) return;
+    if (!isConnected) return;
 
     const newMessage: Message = {
       id: Date.now().toString(),
@@ -163,21 +195,42 @@ function App() {
     };
 
     setMessages(prev => [...prev, newMessage]);
-    socket.emit('chat_message', { 
+    
+    // Type assertion for the emit function
+    (emit as (event: string, data: any) => boolean)('chat_message', { 
       message,
       current_sequence: sequence?.steps || []
     });
   };
 
   const handleSequenceUpdate = (updatedSteps: SequenceStep[]) => {
-    if (!socket || !isConnected || !sequence) return;
+    console.log("App - Handling sequence update:", updatedSteps);
     
-    const updatedSequence = {
-      ...sequence,
-      steps: updatedSteps
-    };
-    setSequence(updatedSequence);
-    socket.emit('sequence_update', { sequence: updatedSteps });
+    if (!isConnected) {
+      console.warn("App - Cannot update sequence: socket not connected");
+      return;
+    }
+    
+    if (!sequence) {
+      console.warn("App - Cannot update sequence: no sequence exists");
+      return;
+    }
+    
+    try {
+      const updatedSequence = {
+        ...sequence,
+        steps: updatedSteps
+      };
+      
+      console.log("App - Updating sequence state");
+      setSequence(updatedSequence);
+      
+      console.log("App - Emitting sequence_update event");
+      // Type assertion for the emit function
+      (emit as (event: string, data: any) => boolean)('sequence_update', { sequence: updatedSteps });
+    } catch (error) {
+      console.error("App - Error updating sequence:", error);
+    }
   };
 
   return (
