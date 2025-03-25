@@ -1,5 +1,5 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
-import { io } from 'socket.io-client';
+import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import { io, Socket } from 'socket.io-client';
 
 // Add socket to window object type for global access
 // This is for backward compatibility with existing code
@@ -17,15 +17,27 @@ import { io } from 'socket.io-client';
 const BACKEND_URL = process.env.REACT_APP_BACKEND_URL || 'http://localhost:5000';
 console.log('SocketContext - Using backend URL:', BACKEND_URL);
 
+// Define the context interface
+interface SocketContextType {
+  socket: Socket | null;
+  isConnected: boolean;
+  emit: (event: string, data?: any) => boolean;
+}
+
 // Create context with initial values
-const SocketContext = createContext({
+const SocketContext = createContext<SocketContextType>({
   socket: null,
   isConnected: false,
   emit: () => false
 });
 
+// Provider props interface
+interface SocketProviderProps {
+  children: ReactNode;
+}
+
 // Custom hook to use the socket context
-export const useSocket = () => {
+export const useSocket = (): SocketContextType => {
   const context = useContext(SocketContext);
   if (!context) {
     console.error("useSocket called outside of SocketProvider");
@@ -35,8 +47,8 @@ export const useSocket = () => {
 };
 
 // Socket provider component
-export const SocketProvider = ({ children }) => {
-  const [socket, setSocket] = useState(null);
+export const SocketProvider: React.FC<SocketProviderProps> = ({ children }) => {
+  const [socket, setSocket] = useState<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
 
   useEffect(() => {
@@ -49,7 +61,7 @@ export const SocketProvider = ({ children }) => {
     setSocket(newSocket);
     
     // Make socket available globally for backward compatibility
-    window.socket = newSocket;
+    (window as any).socket = newSocket;
     console.log('Socket connection established and made available globally via window.socket');
     
     // Socket event listeners
@@ -63,29 +75,26 @@ export const SocketProvider = ({ children }) => {
       setIsConnected(false);
     });
     
-    newSocket.on('connect_error', (error) => {
+    newSocket.on('connect_error', (error: Error) => {
       console.error('Socket connection error:', error);
       setIsConnected(false);
     });
     
-    // Log all incoming socket events (for debugging)
-    const originalOnevent = newSocket.onevent;
-    newSocket.onevent = function(packet) {
-      const args = packet.data || [];
-      console.log('Socket received event:', args[0], args.slice(1));
-      originalOnevent.call(this, packet);
-    };
+    // Set up a listener for all events for debugging purposes
+    newSocket.onAny((event, ...args) => {
+      console.log('Socket received event:', event, args);
+    });
     
     // Cleanup function
     return () => {
       console.log('Cleaning up socket connection');
       newSocket.disconnect();
-      window.socket = null;
+      (window as any).socket = null;
     };
   }, []);
 
   // Emit with better logging
-  const emitEvent = (event, data) => {
+  const emitEvent = (event: string, data?: any): boolean => {
     if (!socket) {
       console.error(`Cannot emit ${event} - socket is null`);
       return false;
@@ -106,7 +115,7 @@ export const SocketProvider = ({ children }) => {
   };
 
   // Value to be provided
-  const contextValue = {
+  const contextValue: SocketContextType = {
     socket,
     isConnected,
     emit: emitEvent
