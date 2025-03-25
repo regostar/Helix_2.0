@@ -8,6 +8,7 @@ import os
 import json
 from datetime import datetime, UTC
 from langchain.schema import HumanMessage
+from sqlalchemy.exc import SQLAlchemyError
 
 # Load environment variables
 load_dotenv()
@@ -17,9 +18,31 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configure database
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///helix.db')
+database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    raise ValueError("DATABASE_URL environment variable is not set")
+
+# Handle Heroku's DATABASE_URL format if present
+if database_url.startswith("postgres://"):
+    database_url = database_url.replace("postgres://", "postgresql://", 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-db = SQLAlchemy(app)
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
+    'pool_size': 10,
+    'pool_recycle': 3600,
+    'pool_pre_ping': True
+}
+
+try:
+    db = SQLAlchemy(app)
+    # Test the database connection
+    with app.app_context():
+        db.engine.connect()
+    print("Successfully connected to PostgreSQL database")
+except SQLAlchemyError as e:
+    print(f"Error connecting to database: {str(e)}")
+    raise
 
 # Initialize SocketIO with CORS settings
 socketio = SocketIO(app, 
@@ -209,9 +232,30 @@ def handle_process_edit(data):
 if __name__ == '__main__':
     with app.app_context():
         db.create_all()
-    port = int(os.getenv('PORT', 5000))
-    socketio.run(app, 
-                host='0.0.0.0', 
-                port=port, 
-                debug=True,
-                allow_unsafe_werkzeug=True) 
+    
+    def find_available_port(start_port, max_port=5010):
+        """Find an available port starting from start_port up to max_port."""
+        import socket
+        for port in range(start_port, max_port + 1):
+            try:
+                with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+                    s.bind(('0.0.0.0', port))
+                    return port
+            except OSError:
+                continue
+        raise RuntimeError(f"No available ports found between {start_port} and {max_port}")
+
+    try:
+        port = int(os.getenv('PORT', 5000))
+        # Try to find an available port if the default is in use
+        port = find_available_port(port)
+        print(f"Starting server on port {port}")
+        socketio.run(app, 
+                    host='0.0.0.0', 
+                    port=port, 
+                    debug=True,
+                    allow_unsafe_werkzeug=True)
+    except Exception as e:
+        print(f"Error starting server: {str(e)}")
+        print("Please make sure no other application is using the port")
+        print("You can also try running the application with a different port by setting the PORT environment variable") 
