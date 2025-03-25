@@ -17,7 +17,9 @@ import {
   Paper,
   Grid,
   Tooltip,
-  Avatar
+  Avatar,
+  ButtonGroup,
+  Button
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
@@ -28,6 +30,7 @@ import LinkedInIcon from '@mui/icons-material/LinkedIn';
 import CallOutlinedIcon from '@mui/icons-material/CallOutlined';
 import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
 import MoreTimeIcon from '@mui/icons-material/MoreTime';
+import AutoFixHighIcon from '@mui/icons-material/AutoFixHigh';
 import { alpha } from '@mui/material/styles';
 import { useSocket } from './SocketContext';
 
@@ -130,7 +133,7 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
     });
   };
 
-  const handleSaveClick = (stepId) => {
+  const handleSaveWithAI = (stepId) => {
     const updatedStep = sequence.steps.find(step => step.id === stepId);
     if (!updatedStep) return;
     
@@ -140,9 +143,9 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
         : step
     );
     
-    console.log('SequenceDisplay - saving edits:', newSteps);
+    console.log('SequenceDisplay - saving edits with AI:', newSteps);
     
-    // Check if onStepUpdate is provided and is a function before calling it
+    // Update state through the callback
     if (typeof onStepUpdate === 'function') {
       try {
         onStepUpdate(newSteps);
@@ -200,6 +203,65 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
       showSnackbar('Error connecting to AI service', 'error');
     }
   };
+
+  const handleDirectSave = (stepId) => {
+    const updatedStep = sequence.steps.find(step => step.id === stepId);
+    if (!updatedStep) return;
+    
+    const newSteps = sequence.steps.map(step => 
+      step.id === stepId 
+        ? { ...step, content: editableSteps[stepId] }
+        : step
+    );
+    
+    console.log('SequenceDisplay - directly saving edits:', newSteps);
+    
+    // Update state through the callback
+    if (typeof onStepUpdate === 'function') {
+      try {
+        onStepUpdate(newSteps);
+        console.log('onStepUpdate called successfully');
+      } catch (error) {
+        console.error('Error calling onStepUpdate:', error);
+        showSnackbar('Error updating sequence', 'error');
+        return;
+      }
+    } else {
+      console.warn('onStepUpdate is not a function or not provided');
+      showSnackbar('Could not update sequence', 'warning');
+      return;
+    }
+    
+    setEditingStepId(null);
+    
+    // Send to backend for processing via socket - only the direct edit, no AI refinement
+    try {
+      if (isConnected) {
+        const editData = {
+          step_id: stepId,
+          new_content: editableSteps[stepId]
+        };
+        
+        const editSuccess = emit('edit_sequence_step', editData);
+        
+        if (editSuccess) {
+          console.log('Direct edit sequence step event emitted successfully');
+          showSnackbar('Changes saved exactly as entered', 'success');
+        } else {
+          throw new Error('Failed to emit edit_sequence_step event');
+        }
+      } else {
+        console.warn('Socket is not connected');
+        showSnackbar('Changes saved but socket disconnected', 'warning');
+      }
+    } catch (error) {
+      console.error('Error emitting socket events:', error);
+      showSnackbar('Error connecting to service', 'error');
+    }
+  };
+
+  // For backward compatibility
+  const handleSaveClick = handleSaveWithAI;
 
   const handleCancelClick = () => {
     setEditingStepId(null);
@@ -377,37 +439,53 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
                     {editingStepId === step.id ? (
                       <Box>
                         <TextField
-                          inputRef={textFieldRef}
-                          multiline
                           fullWidth
+                          multiline
+                          minRows={3}
+                          maxRows={10}
                           variant="outlined"
-                          value={editableSteps[step.id]}
+                          value={editableSteps[step.id] || ''}
                           onChange={(e) => handleContentChange(step.id, e.target.value)}
-                          sx={{ 
-                            mb: 2,
+                          inputRef={textFieldRef}
+                          sx={{
+                            my: 1,
                             '& .MuiOutlinedInput-root': {
-                              borderRadius: 1.5,
+                              borderRadius: 1,
+                              bgcolor: 'white',
                             }
                           }}
                         />
-                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                          <Tooltip title="Save changes">
-                            <IconButton 
-                              size="small" 
-                              color="primary" 
-                              onClick={() => handleSaveClick(step.id)}
-                            >
-                              <SaveIcon />
-                            </IconButton>
-                          </Tooltip>
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1, mt: 1 }}>
                           <Tooltip title="Cancel editing">
                             <IconButton 
                               size="small" 
                               onClick={handleCancelClick}
+                              color="default"
                             >
                               <CancelIcon />
                             </IconButton>
                           </Tooltip>
+                          <ButtonGroup variant="outlined" size="small">
+                            <Tooltip title="Save exactly as entered">
+                              <Button
+                                onClick={() => handleDirectSave(step.id)}
+                                startIcon={<SaveIcon />}
+                                sx={{ fontSize: '0.75rem' }}
+                              >
+                                Save
+                              </Button>
+                            </Tooltip>
+                            <Tooltip title="Save and let AI refine">
+                              <Button
+                                onClick={() => handleSaveWithAI(step.id)}
+                                startIcon={<AutoFixHighIcon />}
+                                color="primary"
+                                sx={{ fontSize: '0.75rem' }}
+                              >
+                                AI Enhance
+                              </Button>
+                            </Tooltip>
+                          </ButtonGroup>
                         </Box>
                       </Box>
                     ) : (
