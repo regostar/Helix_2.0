@@ -24,6 +24,7 @@ wheels/
 .installed.cfg
 *.egg
 venv/
+he_venv/
 
 # Node
 node_modules/
