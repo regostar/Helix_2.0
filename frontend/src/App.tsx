@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { Box, CssBaseline, ThemeProvider, createTheme, AppBar, Toolbar, Typography, Divider } from '@mui/material';
+import { Box, CssBaseline, ThemeProvider, createTheme, AppBar, Toolbar, Typography } from '@mui/material';
+import {
+  Panel,
+  PanelGroup,
+  PanelResizeHandle
+} from 'react-resizable-panels';
 import ChatBar from './components/ChatBar';
 import Workspace from './components/Workspace';
 import { useSocket } from './components/SocketContext';
@@ -64,6 +69,34 @@ const theme = createTheme({
   },
 });
 
+// Resize handle component
+const ResizeHandle = () => {
+  return (
+    <PanelResizeHandle>
+      <div 
+        style={{
+          width: '8px',
+          height: '100%',
+          cursor: 'col-resize',
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+          backgroundColor: 'transparent'
+        }}
+      >
+        <div 
+          style={{
+            width: '3px',
+            height: '40px',
+            backgroundColor: '#e2e8f0',
+            borderRadius: '3px',
+          }}
+        />
+      </div>
+    </PanelResizeHandle>
+  );
+};
+
 // Types
 interface Message {
   id: string;
@@ -102,6 +135,12 @@ function App() {
   const [messages, setMessages] = useState<Message[]>([]);
   const [sequence, setSequence] = useState<Sequence | null>(null);
   const [socketId, setSocketId] = useState<string | null>(null);
+
+  // Add state for panel sizes
+  const [panelSizes, setPanelSizes] = useState(() => {
+    const savedSizes = localStorage.getItem('panelSizes');
+    return savedSizes ? JSON.parse(savedSizes) : [30, 70]; // Default sizes: 30% chat, 70% sequence
+  });
 
   useEffect(() => {
     // Create socket connection using environment variable
@@ -253,6 +292,12 @@ function App() {
     };
   }, []);
 
+  // Save panel sizes to localStorage when they change
+  const handlePanelResize = (sizes: number[]) => {
+    setPanelSizes(sizes);
+    localStorage.setItem('panelSizes', JSON.stringify(sizes));
+  };
+
   const handleSendMessage = (message: string) => {
     if (!isConnected) return;
 
@@ -322,23 +367,42 @@ function App() {
         
         <Box 
           sx={{ 
-            display: 'flex', 
             flexGrow: 1,
             overflow: 'hidden',
-            borderTop: '1px solid',
-            borderColor: 'divider',
+            display: 'flex',
+            flexDirection: 'column'
           }}
         >
-          <ChatBar 
-            messages={messages} 
-            onSendMessage={handleSendMessage} 
-            isConnected={isConnected} 
-          />
-          <Divider orientation="vertical" flexItem />
-          <Workspace 
-            sequence={sequence} 
-            onSequenceUpdate={handleSequenceUpdate} 
-          />
+          <PanelGroup 
+            direction="horizontal" 
+            onLayout={handlePanelResize}
+            style={{ height: '100%' }}
+          >
+            <Panel 
+              defaultSize={panelSizes[0]} 
+              minSize={20}
+              style={{ overflow: 'hidden' }}
+            >
+              <ChatBar 
+                messages={messages} 
+                onSendMessage={handleSendMessage} 
+                isConnected={isConnected} 
+              />
+            </Panel>
+            
+            <ResizeHandle />
+            
+            <Panel 
+              defaultSize={panelSizes[1]} 
+              minSize={30}
+              style={{ overflow: 'hidden' }}
+            >
+              <Workspace 
+                sequence={sequence} 
+                onSequenceUpdate={handleSequenceUpdate} 
+              />
+            </Panel>
+          </PanelGroup>
         </Box>
       </Box>
     </ThemeProvider>

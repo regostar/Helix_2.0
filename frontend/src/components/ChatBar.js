@@ -20,8 +20,7 @@ const ChatContainer = styled(Box)(({ theme }) => ({
   display: 'flex',
   flexDirection: 'column',
   height: '100%',
-  width: '400px',
-  borderRight: `1px solid ${theme.palette.divider}`,
+  width: '100%',
   backgroundColor: theme.palette.background.default,
 }));
 
