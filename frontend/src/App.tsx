@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { Box, CssBaseline, ThemeProvider, createTheme } from '@mui/material';
+import { Box, CssBaseline, ThemeProvider, createTheme, AppBar, Toolbar, Typography, Divider } from '@mui/material';
 import ChatBar from './components/ChatBar';
 import Workspace from './components/Workspace';
 import { useSocket } from './components/SocketContext';
@@ -10,10 +10,56 @@ const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#2196f3',
+      main: '#2563eb', // Modern blue
     },
     secondary: {
-      main: '#f50057',
+      main: '#10b981', // Modern teal
+    },
+    background: {
+      default: '#f8fafc',
+      paper: '#ffffff',
+    },
+    text: {
+      primary: '#1e293b',
+      secondary: '#64748b',
+    },
+  },
+  typography: {
+    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
+    h5: {
+      fontWeight: 600,
+      letterSpacing: '-0.02em',
+    },
+    subtitle1: {
+      letterSpacing: '-0.01em',
+    },
+  },
+  shape: {
+    borderRadius: 8,
+  },
+  components: {
+    MuiButton: {
+      styleOverrides: {
+        root: {
+          textTransform: 'none',
+          fontWeight: 600,
+        },
+      },
+    },
+    MuiPaper: {
+      styleOverrides: {
+        root: {
+          boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
+        },
+      },
+    },
+    MuiAppBar: {
+      styleOverrides: {
+        root: {
+          boxShadow: 'none',
+          borderBottom: '1px solid #e2e8f0',
+        },
+      },
     },
   },
 });
@@ -262,22 +308,33 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ 
-        display: 'flex', 
-        flexDirection: 'column',
-        height: '100vh',
-        overflow: 'hidden'
-      }}>
-        <Box sx={{ 
-          display: 'flex', 
-          flexGrow: 1,
-          overflow: 'hidden'
-        }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
+        <AppBar position="static" color="default" elevation={0}>
+          <Toolbar sx={{ justifyContent: 'space-between' }}>
+            <Typography variant="h6" component="div" sx={{ fontWeight: 600 }}>
+              Helix Recruiting
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              {isConnected ? 'Connected to server' : 'Disconnected'}
+            </Typography>
+          </Toolbar>
+        </AppBar>
+        
+        <Box 
+          sx={{ 
+            display: 'flex', 
+            flexGrow: 1,
+            overflow: 'hidden',
+            borderTop: '1px solid',
+            borderColor: 'divider',
+          }}
+        >
           <ChatBar 
             messages={messages} 
             onSendMessage={handleSendMessage} 
             isConnected={isConnected} 
           />
+          <Divider orientation="vertical" flexItem />
           <Workspace 
             sequence={sequence} 
             onSequenceUpdate={handleSequenceUpdate} 

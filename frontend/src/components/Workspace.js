@@ -3,7 +3,6 @@ import {
   Box,
   Paper,
   Typography,
-  IconButton,
   TextField,
   Button,
   Dialog,
@@ -11,8 +10,12 @@ import {
   DialogContent,
   DialogActions,
   MenuItem,
+  IconButton,
+  Tooltip,
+  Divider
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
+import CloseIcon from '@mui/icons-material/Close';
 import SequenceDisplay from './SequenceDisplay';
 
 function Workspace({ sequence, onSequenceUpdate }) {
@@ -130,41 +133,111 @@ function Workspace({ sequence, onSequenceUpdate }) {
   };
 
   return (
-    <Box sx={{ flexGrow: 1, p: 3, overflow: 'auto' }}>
-      <Paper sx={{ height: '100%', p: 3 }}>
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 3 }}>
-          <Typography variant="h5">Recruiting Sequence</Typography>
+    <Box sx={{ 
+      flexGrow: 1, 
+      display: 'flex', 
+      flexDirection: 'column',
+      height: '100%',
+      overflow: 'hidden'
+    }}>
+      <Box sx={{ 
+        display: 'flex', 
+        justifyContent: 'space-between', 
+        alignItems: 'center',
+        px: 3,
+        py: 2,
+        borderBottom: '1px solid',
+        borderColor: 'divider'
+      }}>
+        <Typography variant="h6" sx={{ fontWeight: 600 }}>
+          Recruiting Sequence
+        </Typography>
+        <Tooltip title="Add new step">
           <Button
             variant="contained"
             startIcon={<AddIcon />}
             onClick={() => handleOpenDialog()}
+            size="small"
+            disableElevation
           >
             Add Step
           </Button>
-        </Box>
-
-        {parsedSequence && (
+        </Tooltip>
+      </Box>
+      
+      <Box sx={{ 
+        flexGrow: 1, 
+        overflow: 'auto',
+        p: 3
+      }}>
+        {parsedSequence ? (
           <SequenceDisplay sequence={parsedSequence} onStepUpdate={handleStepUpdate} />
+        ) : (
+          <Box sx={{ 
+            height: '100%', 
+            display: 'flex', 
+            alignItems: 'center', 
+            justifyContent: 'center',
+            flexDirection: 'column',
+            gap: 2,
+            color: 'text.secondary'
+          }}>
+            <Typography variant="h6">No Sequence Available</Typography>
+            <Typography variant="body2">
+              Create a new recruiting sequence using the chat assistant.
+            </Typography>
+          </Box>
         )}
-      </Paper>
+      </Box>
 
-      <Dialog open={openDialog} onClose={handleCloseDialog} maxWidth="sm" fullWidth>
-        <DialogTitle>
-          {editingStep ? 'Edit Step' : 'Add New Step'}
+      <Dialog 
+        open={openDialog} 
+        onClose={handleCloseDialog} 
+        maxWidth="sm" 
+        fullWidth
+        PaperProps={{
+          elevation: 0,
+          sx: { 
+            borderRadius: 2,
+            border: '1px solid',
+            borderColor: 'divider'
+          }
+        }}
+      >
+        <DialogTitle sx={{ 
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center', 
+          pb: 1
+        }}>
+          <Typography variant="h6" sx={{ fontWeight: 600 }}>
+            {editingStep ? 'Edit Step' : 'Add New Step'}
+          </Typography>
+          <IconButton size="small" onClick={handleCloseDialog} aria-label="close">
+            <CloseIcon fontSize="small" />
+          </IconButton>
         </DialogTitle>
-        <DialogContent>
-          <Box sx={{ pt: 2, display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Divider />
+        <DialogContent sx={{ pt: 3 }}>
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
             <TextField
               select
               label="Type"
               value={newStep.type}
               onChange={(e) => setNewStep({ ...newStep, type: e.target.value })}
               fullWidth
+              variant="outlined"
+              sx={{ 
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1.5,
+                }
+              }}
             >
               <MenuItem value="email">Email</MenuItem>
               <MenuItem value="linkedin">LinkedIn Message</MenuItem>
               <MenuItem value="call">Phone Call</MenuItem>
               <MenuItem value="meeting">Meeting</MenuItem>
+              <MenuItem value="other">Other</MenuItem>
             </TextField>
             <TextField
               label="Content"
@@ -173,6 +246,13 @@ function Workspace({ sequence, onSequenceUpdate }) {
               value={newStep.content}
               onChange={(e) => setNewStep({ ...newStep, content: e.target.value })}
               fullWidth
+              variant="outlined"
+              placeholder="Enter the message content for this step..."
+              sx={{ 
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1.5,
+                }
+              }}
             />
             <TextField
               label="Delay (days)"
@@ -182,6 +262,13 @@ function Workspace({ sequence, onSequenceUpdate }) {
                 setNewStep({ ...newStep, delay: parseInt(e.target.value) || 0 })
               }
               fullWidth
+              variant="outlined"
+              helperText="Number of days to wait after the previous step"
+              sx={{ 
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1.5,
+                }
+              }}
             />
             <TextField
               label="Personalization Tips"
@@ -192,12 +279,32 @@ function Workspace({ sequence, onSequenceUpdate }) {
                 setNewStep({ ...newStep, personalization_tips: e.target.value })
               }
               fullWidth
+              variant="outlined"
+              placeholder="Add tips for personalizing this message..."
+              sx={{ 
+                '& .MuiOutlinedInput-root': {
+                  borderRadius: 1.5,
+                }
+              }}
             />
           </Box>
         </DialogContent>
-        <DialogActions>
-          <Button onClick={handleCloseDialog}>Cancel</Button>
-          <Button onClick={handleSaveStep} variant="contained" color="primary">
+        <DialogActions sx={{ px: 3, py: 2 }}>
+          <Button 
+            onClick={handleCloseDialog} 
+            variant="outlined"
+            sx={{ textTransform: 'none', borderRadius: 1.5 }}
+          >
+            Cancel
+          </Button>
+          <Button 
+            onClick={handleSaveStep} 
+            variant="contained" 
+            color="primary"
+            disableElevation
+            disabled={!newStep.content}
+            sx={{ textTransform: 'none', borderRadius: 1.5 }}
+          >
             Save
           </Button>
         </DialogActions>

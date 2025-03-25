@@ -12,12 +12,23 @@ import {
   IconButton,
   TextField,
   Snackbar,
-  Alert
+  Alert,
+  Badge,
+  Paper,
+  Grid,
+  Tooltip,
+  Avatar
 } from '@mui/material';
 import EditIcon from '@mui/icons-material/Edit';
 import SaveIcon from '@mui/icons-material/Save';
 import CancelIcon from '@mui/icons-material/Cancel';
 import DeleteIcon from '@mui/icons-material/Delete';
+import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined';
+import LinkedInIcon from '@mui/icons-material/LinkedIn';
+import CallOutlinedIcon from '@mui/icons-material/CallOutlined';
+import EventOutlinedIcon from '@mui/icons-material/EventOutlined';
+import MoreTimeIcon from '@mui/icons-material/MoreTime';
+import { alpha } from '@mui/material/styles';
 import { useSocket } from './SocketContext';
 
 /**
@@ -58,7 +69,7 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
     console.warn('SequenceDisplay - No sequence provided');
     return (
       <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography variant="body1" color="textSecondary">
+        <Typography variant="body1" color="text.secondary">
           No sequence data available. Create a new sequence to get started.
         </Typography>
       </Box>
@@ -69,7 +80,7 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
     console.warn('SequenceDisplay - No steps in sequence:', sequence);
     return (
       <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography variant="body1" color="textSecondary">
+        <Typography variant="body1" color="text.secondary">
           This sequence doesn't have any steps yet. Add some steps to get started.
         </Typography>
       </Box>
@@ -80,7 +91,7 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
     console.warn('SequenceDisplay - No metadata in sequence:', sequence);
     return (
       <Box sx={{ p: 4, textAlign: 'center' }}>
-        <Typography variant="body1" color="textSecondary">
+        <Typography variant="body1" color="text.secondary">
           Sequence is missing metadata. Please regenerate the sequence.
         </Typography>
       </Box>
@@ -130,7 +141,6 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
     );
     
     console.log('SequenceDisplay - saving edits:', newSteps);
-    console.log('onStepUpdate is:', typeof onStepUpdate);
     
     // Check if onStepUpdate is provided and is a function before calling it
     if (typeof onStepUpdate === 'function') {
@@ -183,7 +193,6 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
     const newSteps = sequence.steps.filter(step => step.id !== stepId);
     
     console.log('SequenceDisplay - deleting step:', stepId);
-    console.log('onStepUpdate is:', typeof onStepUpdate);
     
     // Check if onStepUpdate is provided and is a function before calling it
     if (typeof onStepUpdate === 'function') {
@@ -201,121 +210,255 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
     }
   };
 
+  // Get step icon based on type
+  const getStepIcon = (type) => {
+    switch(type) {
+      case 'email':
+        return <EmailOutlinedIcon />;
+      case 'linkedin':
+        return <LinkedInIcon />;
+      case 'call':
+        return <CallOutlinedIcon />;
+      case 'meeting':
+        return <EventOutlinedIcon />;
+      default:
+        return <MoreTimeIcon />;
+    }
+  };
+
+  // Get step color based on type
+  const getStepColor = (type) => {
+    switch(type) {
+      case 'email':
+        return '#2563eb'; // blue
+      case 'linkedin':
+        return '#0077b5'; // LinkedIn blue
+      case 'call':
+        return '#10b981'; // green
+      case 'meeting':
+        return '#8b5cf6'; // purple
+      default:
+        return '#6b7280'; // gray
+    }
+  };
+
   return (
-    <Box sx={{ width: '100%', p: 2 }}>
+    <Box sx={{ width: '100%' }}>
       {/* Metadata Section */}
-      <Card sx={{ mb: 3, backgroundColor: '#f5f5f5' }}>
+      <Card 
+        sx={{ 
+          mb: 4, 
+          borderRadius: 2,
+          background: 'linear-gradient(to right, #f1f5f9, #f8fafc)',
+          boxShadow: 'none',
+          border: '1px solid #e2e8f0'
+        }}
+      >
         <CardContent>
-          <Typography variant="h6" gutterBottom>
-            Sequence Details
+          <Typography variant="h5" gutterBottom sx={{ fontWeight: 'medium' }}>
+            {sequence.metadata.role} Recruiting Sequence
           </Typography>
-          <Typography variant="body1">
-            Role: {sequence.metadata.role}
-          </Typography>
-          <Typography variant="body1">
-            Industry: {sequence.metadata.industry}
-          </Typography>
-          <Typography variant="body1">
-            Seniority: {sequence.metadata.seniority}
-          </Typography>
-          <Typography variant="body1">
-            Company Type: {sequence.metadata.company_type}
-          </Typography>
+          
+          <Grid container spacing={2} sx={{ mt: 1 }}>
+            <Grid item xs={6} md={3}>
+              <Typography variant="body2" color="text.secondary">
+                Industry
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                {sequence.metadata.industry}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Typography variant="body2" color="text.secondary">
+                Seniority
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                {sequence.metadata.seniority}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Typography variant="body2" color="text.secondary">
+                Company Type
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                {sequence.metadata.company_type || 'Any'}
+              </Typography>
+            </Grid>
+            <Grid item xs={6} md={3}>
+              <Typography variant="body2" color="text.secondary">
+                Generated
+              </Typography>
+              <Typography variant="body1" gutterBottom>
+                {new Date(sequence.metadata.generated_at).toLocaleDateString()}
+              </Typography>
+            </Grid>
+          </Grid>
         </CardContent>
       </Card>
 
       {/* Steps Section */}
-      <Stepper orientation="vertical">
-        {sequence.steps.map((step, index) => (
-          <Step key={step.id} active={true}>
-            <StepLabel>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                <Typography variant="subtitle1">
-                  Step {index + 1}
-                </Typography>
-                <Chip 
-                  label={step.type} 
-                  color={
-                    step.type === 'email' ? 'primary' :
-                    step.type === 'linkedin' ? 'info' :
-                    step.type === 'call' ? 'success' : 'default'
-                  }
-                  size="small"
-                />
-                <Chip 
-                  label={`${step.delay} days`} 
+      <Stepper orientation="vertical" sx={{ ml: -1 }}>
+        {sequence.steps.map((step, index) => {
+          const stepColor = getStepColor(step.type);
+          return (
+            <Step key={step.id} active={true}>
+              <StepLabel 
+                StepIconComponent={() => (
+                  <CustomAvatar sx={{ 
+                    bgcolor: alpha(stepColor, 0.1), 
+                    color: stepColor,
+                    width: 36,
+                    height: 36
+                  }}>
+                    {getStepIcon(step.type)}
+                  </CustomAvatar>
+                )}
+              >
+                <Box sx={{ 
+                  display: 'flex', 
+                  alignItems: 'center', 
+                  justifyContent: 'space-between',
+                  gap: 1,
+                  pr: 1,
+                  py: 0.5
+                }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="subtitle1" sx={{ fontWeight: 500 }}>
+                      Step {index + 1}
+                    </Typography>
+                    <Chip 
+                      label={step.type} 
+                      size="small"
+                      sx={{ 
+                        bgcolor: alpha(stepColor, 0.1), 
+                        color: stepColor,
+                        fontWeight: 500,
+                        borderRadius: '4px'
+                      }}
+                    />
+                  </Box>
+                  <Chip 
+                    icon={<MoreTimeIcon fontSize="small" />}
+                    label={`${step.delay} days`} 
+                    variant="outlined" 
+                    size="small"
+                    sx={{ borderRadius: '4px' }}
+                  />
+                </Box>
+              </StepLabel>
+              <StepContent>
+                <Card 
                   variant="outlined" 
-                  size="small"
-                />
-              </Box>
-            </StepLabel>
-            <StepContent>
-              <Card variant="outlined" sx={{ mt: 1, mb: 2 }}>
-                <CardContent sx={{ position: 'relative' }}>
-                  {editingStepId === step.id ? (
-                    <Box>
-                      <TextField
-                        inputRef={textFieldRef}
-                        multiline
-                        fullWidth
-                        variant="outlined"
-                        value={editableSteps[step.id]}
-                        onChange={(e) => handleContentChange(step.id, e.target.value)}
-                        sx={{ mb: 2 }}
-                      />
-                      <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
-                        <IconButton 
-                          size="small" 
-                          color="primary" 
-                          onClick={() => handleSaveClick(step.id)}
-                          title="Save changes"
-                        >
-                          <SaveIcon />
-                        </IconButton>
-                        <IconButton 
-                          size="small" 
-                          onClick={handleCancelClick}
-                          title="Cancel editing"
-                        >
-                          <CancelIcon />
-                        </IconButton>
+                  sx={{ 
+                    mt: 1, 
+                    mb: 2, 
+                    borderRadius: 1.5,
+                    borderColor: '#e2e8f0',
+                    boxShadow: 'none'
+                  }}
+                >
+                  <CardContent sx={{ position: 'relative', pb: 1 }}>
+                    {editingStepId === step.id ? (
+                      <Box>
+                        <TextField
+                          inputRef={textFieldRef}
+                          multiline
+                          fullWidth
+                          variant="outlined"
+                          value={editableSteps[step.id]}
+                          onChange={(e) => handleContentChange(step.id, e.target.value)}
+                          sx={{ 
+                            mb: 2,
+                            '& .MuiOutlinedInput-root': {
+                              borderRadius: 1.5,
+                            }
+                          }}
+                        />
+                        <Box sx={{ display: 'flex', justifyContent: 'flex-end', gap: 1 }}>
+                          <Tooltip title="Save changes">
+                            <IconButton 
+                              size="small" 
+                              color="primary" 
+                              onClick={() => handleSaveClick(step.id)}
+                            >
+                              <SaveIcon />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Cancel editing">
+                            <IconButton 
+                              size="small" 
+                              onClick={handleCancelClick}
+                            >
+                              <CancelIcon />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
                       </Box>
-                    </Box>
-                  ) : (
-                    <>
-                      <Typography variant="body1" gutterBottom>
-                        {step.content}
-                      </Typography>
-                      <Box sx={{ position: 'absolute', top: 8, right: 8, display: 'flex' }}>
-                        <IconButton 
-                          size="small"
-                          onClick={() => handleEditClick(step.id, step.content)}
-                          title="Edit message"
+                    ) : (
+                      <>
+                        <Typography 
+                          variant="body1" 
+                          gutterBottom
+                          sx={{ lineHeight: 1.6, pr: 6 }}
                         >
-                          <EditIcon />
-                        </IconButton>
-                        <IconButton 
-                          size="small"
-                          color="error"
-                          onClick={() => handleDeleteClick(step.id)}
-                          title="Delete step"
+                          {step.content}
+                        </Typography>
+                        <Box sx={{ position: 'absolute', top: 10, right: 10, display: 'flex' }}>
+                          <Tooltip title="Edit message">
+                            <IconButton 
+                              size="small"
+                              onClick={() => handleEditClick(step.id, step.content)}
+                              sx={{ color: 'text.secondary' }}
+                            >
+                              <EditIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                          <Tooltip title="Delete step">
+                            <IconButton 
+                              size="small"
+                              onClick={() => handleDeleteClick(step.id)}
+                              sx={{ color: 'text.secondary' }}
+                            >
+                              <DeleteIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        </Box>
+                      </>
+                    )}
+                    
+                    {step.personalization_tips && (
+                      <Paper 
+                        variant="outlined" 
+                        sx={{ 
+                          mt: 2, 
+                          p: 1.5, 
+                          bgcolor: alpha('#f8fafc', 0.8),
+                          borderColor: '#e2e8f0',
+                          borderRadius: 1,
+                        }}
+                      >
+                        <Typography 
+                          variant="subtitle2" 
+                          color="text.secondary" 
+                          sx={{ fontWeight: 500, mb: 0.5 }}
                         >
-                          <DeleteIcon />
-                        </IconButton>
-                      </Box>
-                    </>
-                  )}
-                  <Typography variant="subtitle2" color="textSecondary" sx={{ mt: 1 }}>
-                    Personalization Tips:
-                  </Typography>
-                  <Typography variant="body2" color="textSecondary">
-                    {step.personalization_tips}
-                  </Typography>
-                </CardContent>
-              </Card>
-            </StepContent>
-          </Step>
-        ))}
+                          Personalization Tips
+                        </Typography>
+                        <Typography 
+                          variant="body2" 
+                          color="text.secondary"
+                          sx={{ lineHeight: 1.5 }}
+                        >
+                          {step.personalization_tips}
+                        </Typography>
+                      </Paper>
+                    )}
+                  </CardContent>
+                </Card>
+              </StepContent>
+            </Step>
+          );
+        })}
       </Stepper>
 
       {/* Snackbar for notifications */}
@@ -325,10 +468,36 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
         onClose={handleSnackbarClose}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert onClose={handleSnackbarClose} severity={snackbarSeverity} sx={{ width: '100%' }}>
+        <Alert 
+          onClose={handleSnackbarClose} 
+          severity={snackbarSeverity} 
+          sx={{ 
+            width: '100%',
+            boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)'
+          }}
+        >
           {snackbarMessage}
         </Alert>
       </Snackbar>
+    </Box>
+  );
+};
+
+// Missing Avatar component import
+const CustomAvatar = ({ children, sx = {} }) => {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        width: 28,
+        height: 28,
+        borderRadius: '50%',
+        ...sx
+      }}
+    >
+      {children}
     </Box>
   );
 };
