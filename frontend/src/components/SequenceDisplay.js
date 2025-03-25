@@ -161,26 +161,42 @@ const SequenceDisplay = ({ sequence, onStepUpdate = () => {} }) => {
     // Send to backend for processing via socket
     try {
       if (isConnected) {
-        const eventData = {
+        // First, emit the direct edit_sequence_step event to update the database
+        const editData = {
           step_id: stepId,
-          content: editableSteps[stepId],
-          request: "Refine this step based on the edits to make it more effective"
+          new_content: editableSteps[stepId]
         };
         
-        const success = emit('process_edit', eventData);
+        const editSuccess = emit('edit_sequence_step', editData);
         
-        if (success) {
-          console.log('Socket event emitted successfully');
-          showSnackbar('Changes saved and being refined by AI', 'success');
+        if (editSuccess) {
+          console.log('Edit sequence step event emitted successfully');
+          
+          // Then, send for AI refinement
+          const refinementData = {
+            step_id: stepId,
+            content: editableSteps[stepId],
+            request: "Refine this step based on the edits to make it more effective"
+          };
+          
+          const refinementSuccess = emit('process_edit', refinementData);
+          
+          if (refinementSuccess) {
+            console.log('Process edit event emitted successfully');
+            showSnackbar('Changes saved and being refined by AI', 'success');
+          } else {
+            console.warn('Failed to emit process_edit event');
+            showSnackbar('Changes saved but AI refinement failed', 'warning');
+          }
         } else {
-          throw new Error('Failed to emit event');
+          throw new Error('Failed to emit edit_sequence_step event');
         }
       } else {
         console.warn('Socket is not connected');
         showSnackbar('Changes saved but AI refinement unavailable - socket disconnected', 'warning');
       }
     } catch (error) {
-      console.error('Error emitting socket event:', error);
+      console.error('Error emitting socket events:', error);
       showSnackbar('Error connecting to AI service', 'error');
     }
   };

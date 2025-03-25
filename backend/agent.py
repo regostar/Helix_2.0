@@ -13,6 +13,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from dotenv import load_dotenv
 import datetime
+from flask_sqlalchemy import SQLAlchemy
+from datetime import datetime, UTC
+from flask_socketio import emit
 
 load_dotenv()
 
@@ -29,6 +32,7 @@ IMPORTANT INSTRUCTIONS:
    - "action_input": The input string for the chosen tool
 4. Do not include ANY other text before or after the JSON
 5. The response must be valid JSON that can be parsed by json.loads()
+6. When editing a sequence step, ALWAYS use the tool name "edit_sequence_step", NOT "modify_sequence_step"
 
 Example valid responses:
 {{
@@ -41,6 +45,16 @@ Example valid responses:
     "action_input": "What industry is this role in?"
 }}
 
+{{
+    "action": "generate_job_description",
+    "action_input": "Create a job description for a senior software engineer role"
+}}
+
+{{
+    "action": "edit_sequence_step",
+    "action_input": "{{\\"step_id\\": \\"1\\", \\"new_content\\": \\"Updated message content\\"}}"
+}}
+
 Remember: ONLY return the JSON object, nothing else."""
 
 HUMAN_TEMPLATE = """Current conversation:
@@ -51,13 +65,25 @@ Current sequence:
 
 User request: {input}"""
 
+# This will be populated from app.py when the agent is initialized
+db = SQLAlchemy()
+Sequence = None
+
 class RecruitingAgent:
-    def __init__(self):
+    def __init__(self, db_instance=None, sequence_model=None):
+        global db, Sequence
         self.llm = ChatOpenAI(
             temperature=0.7,
             model="gpt-4",
             openai_api_key=os.getenv("OPENAI_API_KEY"),
         )
+        self.db = db_instance
+        # Set the global db instance
+        if db_instance:
+            db = db_instance
+        # Set the global Sequence model
+        if sequence_model:
+            Sequence = sequence_model
         self.tools = self._get_tools()
         self.prompt = self._create_prompt()
         self.output_parser = self._create_output_parser()
@@ -77,9 +103,19 @@ class RecruitingAgent:
                 description="Ask a clarifying question to better understand the user's requirements"
             ),
             Tool(
+                name="generate_job_description",
+                func=self._generate_job_description,
+                description="Generate a job description based on the user's requirements"
+            ),
+            Tool(
                 name="generate_sequence",
                 func=self._generate_sequence,
                 description="Generate a new recruiting sequence based on the user's requirements"
+            ),
+            Tool(
+                name="edit_sequence_step",
+                func=self._edit_sequence_step,
+                description="Edit a specific step in the recruiting sequence"
             ),
             Tool(
                 name="modify_sequence",
@@ -131,11 +167,11 @@ class RecruitingAgent:
         response_schemas = [
             ResponseSchema(
                 name="action",
-                description="The action to take. Must be one of: ask_clarifying_question, generate_sequence, modify_sequence, provide_feedback",
+                description="The action to take. Must be one of: ask_clarifying_question, generate_sequence, modify_sequence, provide_feedback, edit_sequence_step",
             ),
             ResponseSchema(
                 name="action_input",
-                description="The input to provide to the tool. For generate_sequence, provide the requirements. For ask_clarifying_question, provide the question. For modify_sequence, provide the modifications. For provide_feedback, provide the sequence to analyze.",
+                description="The input to provide to the tool. For generate_sequence, provide the requirements. For ask_clarifying_question, provide the question. For modify_sequence, provide the modifications. For provide_feedback, provide the sequence to analyze. For edit_sequence_step, provide a JSON string with step_id and new_content.",
             ),
         ]
         return StructuredOutputParser.from_response_schemas(response_schemas)
@@ -221,7 +257,7 @@ Do not include any other text before or after the JSON array."""
                     "industry": parsed_analysis["industry"],
                     "seniority": parsed_analysis["seniority"],
                     "company_type": parsed_analysis["company_type"],
-                    "generated_at": datetime.datetime.now().isoformat()
+                    "generated_at": datetime.now(UTC).isoformat()
                 },
                 "steps": sequence
             }
@@ -490,6 +526,166 @@ Do not include any other text before or after the JSON array."""
         except Exception as e:
             return json.dumps({"error": f"Failed to merge candidate data: {str(e)}"})
 
+    def _generate_job_description(self, requirements: str) -> str:
+        """Generate a job description based on the given requirements.
+        
+        Args:
+            requirements (str): String containing role details and requirements
+            
+        Returns:
+            str: JSON string containing the generated job description
+        """
+        try:
+            # First, analyze the requirements to extract key information
+            analysis_prompt = f"""Analyze these job requirements and return ONLY a JSON object with the following fields:
+            Requirements: {requirements}
+
+IMPORTANT: Respond with ONLY a JSON object containing these exact fields:
+{{
+    "role_title": "the job title",
+    "department": "the department",
+    "location": "the location (remote/hybrid/onsite)",
+    "employment_type": "full-time/part-time/contract",
+    "experience_level": "entry/mid/senior/lead",
+    "key_skills": ["skill1", "skill2", ...],
+    "responsibilities": ["responsibility1", "responsibility2", ...],
+    "requirements": ["requirement1", "requirement2", ...],
+    "preferred_qualifications": ["qualification1", "qualification2", ...],
+    "benefits": ["benefit1", "benefit2", ...]
+}}
+
+Do not include any other text before or after the JSON."""
+            
+            analysis = self.llm([HumanMessage(content=analysis_prompt)])
+            parsed_analysis = json.loads(analysis.content.strip())
+            
+            # Generate the job description based on the analysis
+            description_prompt = f"""Generate a professional job description based on this analysis:
+{json.dumps(parsed_analysis, indent=2)}
+
+IMPORTANT: Respond with ONLY a JSON object containing these exact fields:
+{{
+    "title": "Job Title",
+    "company": "Company Name",
+    "location": "Location",
+    "employment_type": "Employment Type",
+    "description": "Full job description text",
+    "requirements": "Requirements section text",
+    "benefits": "Benefits section text"
+}}
+
+The description should be well-formatted, professional, and include all the key information from the analysis.
+Do not include any other text before or after the JSON."""
+            
+            description = self.llm([HumanMessage(content=description_prompt)])
+            return description.content.strip()
+            
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": f"Error generating job description: {str(e)}"
+            })
+
+    def _edit_sequence_step(self, input_data: str) -> str:
+        """Edit a specific step in the recruiting sequence.
+        
+        Args:
+            input_data (str): JSON string containing step_id and new_content
+            
+        Returns:
+            str: JSON string containing the updated sequence
+        """
+        try:
+            # Parse the input data
+            data = json.loads(input_data)
+            step_id = data.get('step_id')
+            new_content = data.get('new_content')
+            
+            if not step_id or not new_content:
+                return json.dumps({
+                    "status": "error",
+                    "message": "Missing step_id or new_content in the request"
+                })
+            
+            # Get the current sequence from the database
+            sequence = self.db.session.query(Sequence).order_by(Sequence.created_at.desc()).first()
+            
+            # If no sequence exists, create a default one
+            if not sequence:
+                # Create a default recruiting sequence with some steps
+                default_steps = [
+                    {
+                        "id": "1",
+                        "type": "email",
+                        "content": "Hello [Candidate's Name], I came across your profile and was impressed by your background. I wanted to reach out about a potential opportunity at our company that might align with your skills and interests.",
+                        "delay": 0,
+                        "personalization_tips": "Reference specific skills or experiences from their profile."
+                    },
+                    {
+                        "id": "2",
+                        "type": "linkedin",
+                        "content": "Hi [Candidate's Name], I recently emailed you regarding an opportunity at our company. I'd love to connect and discuss how your experience might be a great fit for our team.",
+                        "delay": 3,
+                        "personalization_tips": "Mention something specific about their LinkedIn profile that caught your attention."
+                    },
+                    {
+                        "id": "3",
+                        "type": "email",
+                        "content": "Hello again [Candidate's Name], I wanted to follow up on my previous message about the role at our company. I'd be happy to provide more information or answer any questions you might have.",
+                        "delay": 7,
+                        "personalization_tips": "Reference any mutual connections or shared experiences."
+                    }
+                ]
+                
+                # Create new sequence
+                new_sequence = Sequence(
+                    title="Default Recruiting Sequence",
+                    steps=default_steps
+                )
+                self.db.session.add(new_sequence)
+                self.db.session.commit()
+                
+                # Use the newly created sequence
+                sequence = new_sequence
+            
+            # Update the specific step
+            steps = sequence.steps
+            updated = False
+            for step in steps:
+                if step.get('id') == step_id:
+                    step['content'] = new_content
+                    updated = True
+                    break
+            
+            # If step_id not found, add a new step
+            if not updated:
+                new_step = {
+                    "id": step_id,
+                    "type": "email",
+                    "content": new_content,
+                    "delay": 3,
+                    "personalization_tips": "Personalize based on candidate's background."
+                }
+                steps.append(new_step)
+            
+            # Save the updated sequence
+            sequence.steps = steps
+            sequence.updated_at = datetime.now(UTC)
+            self.db.session.commit()
+            
+            # Return success response with updated sequence
+            return json.dumps({
+                "status": "success",
+                "message": "Step updated successfully",
+                "sequence": steps
+            })
+            
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": f"Error editing sequence step: {str(e)}"
+            })
+
     def process_message(self, message: str, chat_history: List[Dict], current_sequence: List[Dict]) -> str:
         """Process a user message and return a response.
         
@@ -534,6 +730,11 @@ Do not include any other text before or after the JSON array."""
             tool_name = parsed_response["action"]
             tool_input = parsed_response["action_input"]
             
+            # Handle the case where tool_name is modify_sequence_step instead of edit_sequence_step
+            if tool_name == "modify_sequence_step":
+                tool_name = "edit_sequence_step"
+                parsed_response["action"] = "edit_sequence_step"
+            
             # Find the matching tool
             tool = next((t for t in self.tools if t.name == tool_name), None)
             if tool is None:
@@ -547,6 +748,22 @@ Do not include any other text before or after the JSON array."""
             
             # Execute the tool
             tool_result = tool.func(tool_input)
+            
+            # Parse tool result for edit_sequence_step
+            if tool_name == "edit_sequence_step":
+                try:
+                    result_json = json.loads(tool_result)
+                    # Check if we need to emit a sequence update
+                    if result_json.get("status") == "success" and "sequence" in result_json:
+                        # Emit a sequence_updated event to update all clients
+                        try:
+                            # This might fail if not in a SocketIO context
+                            emit('sequence_updated', {'data': result_json["sequence"]}, broadcast=True, namespace='/')
+                            print(f"Successfully emitted sequence_updated event with sequence data")
+                        except Exception as e:
+                            print(f"Could not emit sequence update: {str(e)}")
+                except Exception as e:
+                    print(f"Error parsing edit_sequence_step result: {str(e)}")
 
             # Generate appropriate chat response based on the tool and result
             chat_response = ""
@@ -561,8 +778,16 @@ Do not include any other text before or after the JSON array."""
                     chat_response = "I've created a recruiting sequence based on your requirements. Please review it and let me know if you'd like any changes."
             elif tool_name == "ask_clarifying_question":
                 chat_response = tool_input
-            elif tool_name == "modify_sequence":
-                chat_response = "I've modified the sequence based on your feedback. Please review the changes and let me know if you'd like any further adjustments."
+            elif tool_name == "modify_sequence" or tool_name == "edit_sequence_step":
+                # Check if the operation was successful
+                try:
+                    result_json = json.loads(tool_result)
+                    if result_json.get("status") == "success":
+                        chat_response = "I've updated the sequence based on your feedback. Please review the changes and let me know if you'd like any further adjustments."
+                    else:
+                        chat_response = f"I couldn't update the sequence: {result_json.get('message', 'An error occurred')}"
+                except:
+                    chat_response = "I've modified the sequence based on your feedback. Please review the changes and let me know if you'd like any further adjustments."
             elif tool_name == "provide_feedback":
                 chat_response = tool_result
             else:

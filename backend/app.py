@@ -49,9 +49,6 @@ socketio = SocketIO(app,
                    cors_allowed_origins="*",
                    async_mode='eventlet')
 
-# Initialize the recruiting agent
-agent = RecruitingAgent()
-
 # Models
 class Sequence(db.Model):
     id = db.Column(db.Integer, primary_key=True)
@@ -75,6 +72,9 @@ class ChatHistory(db.Model):
             db.session.add(chat_history)
             db.session.commit()
         return chat_history
+
+# Initialize the recruiting agent with database instance and Sequence model
+agent = RecruitingAgent(db_instance=db, sequence_model=Sequence)
 
 # Routes
 @app.route('/api/health', methods=['GET'])
@@ -149,6 +149,17 @@ def handle_chat_message(data):
         try:
             response_data = json.loads(response)
             if response_data.get("status") == "success" and response_data.get("tool_result"):
+                # Check if this is an edit_sequence_step action
+                if response_data.get("llm_response", {}).get("action") == "edit_sequence_step":
+                    try:
+                        tool_result = json.loads(response_data["tool_result"])
+                        if tool_result.get("status") == "success" and tool_result.get("sequence"):
+                            # Emit the updated sequence to all clients
+                            emit('sequence_updated', {'data': tool_result["sequence"]}, broadcast=True)
+                            print("Emitted sequence_updated from edit_sequence_step action")
+                    except json.JSONDecodeError:
+                        pass
+                    
                 # Check if the tool result contains a sequence
                 try:
                     tool_result = json.loads(response_data["tool_result"])
@@ -182,8 +193,57 @@ def handle_sequence_update(data):
         print(f"Error in handle_sequence_update: {str(e)}")
         emit('error', {'data': f"Error saving sequence: {str(e)}"})
 
+@socketio.on('edit_sequence_step')
+def handle_edit_sequence_step(data):
+    try:
+        step_id = data.get('step_id', '')
+        new_content = data.get('new_content', '')
+        
+        if not step_id or not new_content:
+            emit('error', {'data': "Missing step ID or content"})
+            return
+            
+        # Use the agent's edit_sequence_step method
+        input_data = json.dumps({
+            "step_id": step_id,
+            "new_content": new_content
+        })
+        result = json.loads(agent._edit_sequence_step(input_data))
+        
+        if result.get('status') == 'success':
+            # Send the updated sequence to all clients
+            emit('sequence_updated', {'data': result.get('sequence')}, broadcast=True)
+            emit('step_edited', {'step_id': step_id, 'success': True})
+        else:
+            emit('error', {'data': result.get('message', 'Failed to update sequence step')})
+    except Exception as e:
+        print(f"Error in handle_edit_sequence_step: {str(e)}")
+        emit('error', {'data': f"Error updating sequence step: {str(e)}"})
+
+@socketio.on('get_sequence')
+def handle_get_sequence():
+    try:
+        # Get the most recent sequence
+        sequence = Sequence.query.order_by(Sequence.created_at.desc()).first()
+        if sequence:
+            emit('sequence_updated', {'data': sequence.steps})
+        else:
+            # Create a default sequence
+            input_data = json.dumps({
+                "step_id": "1",
+                "new_content": "Hello [Candidate's Name], I wanted to reach out about a potential opportunity."
+            })
+            result = json.loads(agent._edit_sequence_step(input_data))
+            if result.get('status') == 'success':
+                emit('sequence_updated', {'data': result.get('sequence')})
+            else:
+                emit('error', {'data': 'Failed to create default sequence'})
+    except Exception as e:
+        print(f"Error in handle_get_sequence: {str(e)}")
+        emit('error', {'data': f"Error retrieving sequence: {str(e)}"})
+
 @socketio.on('get_chat_history')
-def handle_get_chat_history():
+def handle_get_chat_history(self):
     try:
         chat_history = ChatHistory.get_or_create(request.sid)
         emit('chat_history', {'data': chat_history.messages})

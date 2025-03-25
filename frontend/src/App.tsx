@@ -143,7 +143,7 @@ interface ChatResponse {
 }
 
 interface SequenceUpdatedResponse {
-  data: SequenceStep[];
+  data: SequenceStep[] | Sequence | { steps: SequenceStep[] } | any;
 }
 
 interface StepRefinedResponse {
@@ -217,6 +217,39 @@ function App() {
               }
             }
             
+            // Handle edit_sequence_step actions
+            else if (responseData.llm_response?.action === 'edit_sequence_step' && responseData.tool_result) {
+              try {
+                console.log('Parsing edit_sequence_step result:', responseData.tool_result);
+                const toolResult = JSON.parse(responseData.tool_result);
+                
+                if (toolResult.status === 'success' && toolResult.sequence) {
+                  console.log('Updating sequence from edit_sequence_step:', toolResult.sequence);
+                  if (sequence) {
+                    // Update existing sequence with new steps
+                    setSequence({
+                      ...sequence,
+                      steps: toolResult.sequence
+                    });
+                  } else {
+                    // Create a new sequence with default metadata
+                    setSequence({
+                      metadata: {
+                        role: 'Recruiting',
+                        industry: 'Technology',
+                        seniority: 'Mid-Level',
+                        company_type: 'Enterprise',
+                        generated_at: new Date().toISOString()
+                      },
+                      steps: toolResult.sequence
+                    });
+                  }
+                }
+              } catch (e) {
+                console.error('Error processing edit_sequence_step result:', e);
+              }
+            }
+            
             // Handle sequence modification
             else if (responseData.llm_response?.action === 'modify_sequence' && !responseData.chat_response) {
               const newMessage: Message = {
@@ -272,11 +305,68 @@ function App() {
 
       // Sequence update events
       socket.on('sequence_updated', (data: SequenceUpdatedResponse) => {
-        if (data.data && sequence) {
-          setSequence({
-            ...sequence,
-            steps: data.data
-          });
+        console.log('Received sequence_updated event:', data);
+        
+        if (!data.data) {
+          console.error('Received empty data in sequence_updated event');
+          return;
+        }
+        
+        // Handle both full sequence and just steps array
+        if (Array.isArray(data.data)) {
+          // We received just the steps array
+          console.log('Received steps array in sequence_updated:', data.data);
+          
+          if (sequence) {
+            // Update existing sequence with new steps
+            console.log('Updating existing sequence with new steps');
+            setSequence({
+              ...sequence,
+              steps: data.data
+            });
+          } else {
+            // Create a new sequence with default metadata
+            console.log('Creating new sequence with default metadata');
+            setSequence({
+              metadata: {
+                role: 'Recruiting',
+                industry: 'Technology',
+                seniority: 'Mid-Level',
+                company_type: 'Enterprise',
+                generated_at: new Date().toISOString()
+              },
+              steps: data.data
+            });
+          }
+        } else if (data.data.metadata && data.data.steps) {
+          // We received a full sequence object
+          console.log('Received full sequence object:', data.data);
+          setSequence(data.data);
+        } else if (data.data.steps) {
+          // We received an object with just steps but no metadata
+          console.log('Received object with just steps:', data.data);
+          
+          if (sequence) {
+            // Update existing sequence with new steps
+            setSequence({
+              ...sequence,
+              steps: data.data.steps
+            });
+          } else {
+            // Create a new sequence with default metadata
+            setSequence({
+              metadata: {
+                role: 'Recruiting',
+                industry: 'Technology',
+                seniority: 'Mid-Level',
+                company_type: 'Enterprise',
+                generated_at: new Date().toISOString()
+              },
+              steps: data.data.steps
+            });
+          }
+        } else {
+          console.error('Received invalid data structure in sequence_updated event:', data);
         }
       });
 
