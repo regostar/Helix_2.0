@@ -17,7 +17,15 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configure database
-app.config['SQLALCHEMY_DATABASE_URI'] = os.getenv('DATABASE_URL', 'sqlite:///helix.db')
+database_url = os.getenv('DATABASE_URL')
+if not database_url:
+    raise ValueError("DATABASE_URL environment variable is not set")
+
+# Handle potential 'postgres://' URLs from some hosting providers
+if database_url.startswith('postgres://'):
+    database_url = database_url.replace('postgres://', 'postgresql://', 1)
+
+app.config['SQLALCHEMY_DATABASE_URI'] = database_url
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 db = SQLAlchemy(app)
 
@@ -54,20 +62,25 @@ class ChatHistory(db.Model):
         return chat_history
 
 # Routes
-@app.route('/api/health', methods=['GET'])
-def health_check():
-    return jsonify({"status": "healthy"})
-
+@app.route('/api/health')
 @app.route('/health')
 def health_check():
-    """Health check endpoint for monitoring and CI/CD."""
+    """Health check endpoint for monitoring."""
     try:
         # Check database connection
         with app.app_context():
             db.session.execute('SELECT 1')
-        return jsonify({'status': 'healthy', 'database': 'connected'}), 200
+        return jsonify({
+            'status': 'healthy',
+            'database': 'connected',
+            'timestamp': datetime.now(UTC).isoformat()
+        }), 200
     except Exception as e:
-        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
+        return jsonify({
+            'status': 'unhealthy',
+            'error': str(e),
+            'timestamp': datetime.now(UTC).isoformat()
+        }), 500
 
 # Socket.IO events
 @socketio.on('connect')
@@ -171,7 +184,7 @@ def handle_sequence_update(data):
         emit('error', {'data': f"Error saving sequence: {str(e)}"})
 
 @socketio.on('get_chat_history')
-def handle_get_chat_history():
+def handle_get_chat_history(data=None):
     try:
         chat_history = ChatHistory.get_or_create(request.sid)
         emit('chat_history', {'data': chat_history.messages})
