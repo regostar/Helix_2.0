@@ -1,37 +1,14 @@
-# Helix - AI-Powered Recruiting Outreach Agent
+# Helix - AI-Powered Recruiting Sequence Generator
 
-Helix is an intelligent recruiting outreach agent that transforms how HR finds top talent through a chat-driven interface and dynamic sequence generation.
+Helix is a real-time recruiting sequence generation and management system that uses AI to help create personalized recruiting sequences.
 
-## Features
+## Prerequisites
 
-- 🤖 AI-powered chat interface for natural interaction
-- 📝 Dynamic sequence generation in real-time
-- ✏️ Live editing capabilities
-- 🔄 Real-time updates and synchronization
-- 🎯 Guided prompts for campaign customization
+- Docker
+- Docker Compose
+- OpenAI API Key
 
-## Tech Stack
-
-### Frontend
-- React with TypeScript
-- Socket.io for real-time communication
-- Modern UI components and styling
-
-### Backend
-- Flask (Python)
-- PostgreSQL database
-- Langchain for LLM integration
-- Socket.io for real-time updates
-
-## Getting Started
-
-### Prerequisites
-- Node.js (v16 or higher)
-- Python 3.8+
-- PostgreSQL
-- npm or yarn
-
-### Installation
+## Quick Start
 
 1. Clone the repository:
 ```bash
@@ -39,61 +16,82 @@ git clone https://github.com/yourusername/helix.git
 cd helix
 ```
 
-2. Set up the frontend:
+2. Create a `.env` file in the root directory and add your environment variables:
+```bash
+cp .env.example .env
+```
+Edit the `.env` file and add your OpenAI API key and other configuration values.
+
+3. Build and start the containers:
+```bash
+docker-compose up --build
+```
+
+The application will be available at:
+- Frontend: http://localhost:80
+- Backend API: http://localhost:5000
+
+## Architecture
+
+The application consists of three main services:
+- Frontend (React + TypeScript)
+- Backend (Flask + Socket.IO)
+- Database (PostgreSQL)
+
+## Development
+
+To run the services individually for development:
+
+### Frontend
 ```bash
 cd frontend
 npm install
+npm start
 ```
 
-3. Set up the backend:
+### Backend
 ```bash
 cd backend
 python -m venv venv
-source venv/bin/activate  # On Windows: .\venv\Scripts\activate
+source venv/bin/activate  # On Windows: venv\Scripts\activate
 pip install -r requirements.txt
-```
-
-4. Set up environment variables:
-```bash
-# Create .env files in both frontend and backend directories
-# See .env.example files for required variables
-```
-
-5. Start the development servers:
-```bash
-# Terminal 1 - Frontend
-cd frontend
-npm start
-
-# Terminal 2 - Backend
-cd backend
 flask run
 ```
 
-## Project Structure
+## Production Deployment
 
+1. Update the environment variables in `.env` for production settings
+2. Build and deploy the containers:
+```bash
+docker-compose -f docker-compose.yml up -d
 ```
-helix/
-├── frontend/           # React frontend application
-├── backend/           # Flask backend application
-├── docs/             # Documentation
-└── README.md         # Project documentation
-```
+
+## Environment Variables
+
+Key environment variables that need to be set:
+
+- `OPENAI_API_KEY`: Your OpenAI API key
+- `DATABASE_URL`: PostgreSQL connection string
+- `FLASK_ENV`: Set to 'production' for production deployment
+- `SECRET_KEY`: Flask secret key for session management
+
+## Features
+
+- Real-time chat interface with AI
+- Suggested prompts for sequence generation
+- Dynamic sequence editing and management
+- WebSocket-based real-time updates
+- Responsive and modern UI
+- Docker containerization for easy deployment
 
 ## Contributing
 
 1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/AmazingFeature`)
-3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
-4. Push to the branch (`git push origin feature/AmazingFeature`)
-5. Open a Pull Request
+2. Create a feature branch
+3. Commit your changes
+4. Push to the branch
+5. Create a Pull Request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
-
-## Acknowledgments
-
-- Inspired by SellScale's Selix
-- Built with modern AI and web technologies
-- Special thanks to the open-source community 
+MIT License - see LICENSE file for details 

@@ -58,6 +58,17 @@ class ChatHistory(db.Model):
 def health_check():
     return jsonify({"status": "healthy"})
 
+@app.route('/health')
+def health_check():
+    """Health check endpoint for monitoring and CI/CD."""
+    try:
+        # Check database connection
+        with app.app_context():
+            db.session.execute('SELECT 1')
+        return jsonify({'status': 'healthy', 'database': 'connected'}), 200
+    except Exception as e:
+        return jsonify({'status': 'unhealthy', 'error': str(e)}), 500
+
 # Socket.IO events
 @socketio.on('connect')
 def handle_connect():
