@@ -33,6 +33,8 @@ IMPORTANT INSTRUCTIONS:
 4. Do not include ANY other text before or after the JSON
 5. The response must be valid JSON that can be parsed by json.loads()
 6. When editing a sequence step, ALWAYS use the tool name "edit_sequence_step", NOT "modify_sequence_step"
+7. To create a new recruiting sequence, ALWAYS use the tool name "generate_sequence", NOT "create_sequence"
+8. When the user asks to create a sequence, campaign, or outreach plan, use the "generate_sequence" tool
 
 Example valid responses:
 {{
@@ -45,10 +47,6 @@ Example valid responses:
     "action_input": "What industry is this role in?"
 }}
 
-{{
-    "action": "generate_job_description",
-    "action_input": "Create a job description for a senior software engineer role"
-}}
 
 {{
     "action": "edit_sequence_step",
@@ -101,11 +99,6 @@ class RecruitingAgent:
                 name="ask_clarifying_question",
                 func=self._ask_clarifying_question,
                 description="Ask a clarifying question to better understand the user's requirements"
-            ),
-            Tool(
-                name="generate_job_description",
-                func=self._generate_job_description,
-                description="Generate a job description based on the user's requirements"
             ),
             Tool(
                 name="generate_sequence",
@@ -202,10 +195,173 @@ class RecruitingAgent:
             requirements (str): String containing role, industry, seniority, and other requirements
             
         Returns:
-            str: JSON string containing the generated sequence
+            str: JSON string containing the generated sequence or next question
         """
         try:
-            # Get initial response from LLM to analyze requirements
+            # Check if this is a request to start creating a recruiting sequence
+            if ("create sequence" in requirements.lower() or 
+                "recruiting sequence" in requirements.lower() or 
+                "recruiting plan" in requirements.lower() or 
+                "campaign" in requirements.lower() or
+                "email campaign" in requirements.lower()):
+                
+                # Try to extract role information from the request
+                extracted_role = None
+                
+                # Look for common job title patterns
+                job_titles = ["software engineer", "product manager", "data scientist", 
+                             "frontend developer", "backend developer", "full stack", 
+                             "senior engineer", "tech lead", "designer", "marketing", 
+                             "sales", "recruiter", "hr", "developer"]
+                             
+                for title in job_titles:
+                    if title in requirements.lower():
+                        extracted_role = title
+                        break
+                
+                # If we found a role, include it in the collected info
+                initial_info = {}
+                if extracted_role:
+                    initial_info["pre_identified_role"] = extracted_role
+                
+                # Start the recruiting sequence creation process with first question to understand campaign idea
+                return json.dumps({
+                    "status": "question",
+                    "message": "I'll help you create a customized recruiting sequence. Let's start by understanding your campaign idea and requirements.",
+                    "question": "Please describe your overall campaign idea or strategy. What are you trying to achieve with this recruiting campaign?",
+                    "sequence_info": {
+                        "step": 1,
+                        "collected_info": initial_info
+                    }
+                })
+            
+            # Check if this is a response to one of our questions
+            try:
+                data = json.loads(requirements)
+                if isinstance(data, dict) and "sequence_info" in data and "user_response" in data:
+                    sequence_info = data["sequence_info"]
+                    user_response = data["user_response"]
+                    current_step = sequence_info.get("step", 0)
+                    collected_info = sequence_info.get("collected_info", {})
+                    
+                    # Update collected info based on current step
+                    if current_step == 1:  # Campaign idea/strategy
+                        collected_info["campaign_idea"] = user_response
+                        
+                        # If we already identified a role from the initial request, personalize the question
+                        pre_identified_role = collected_info.get("pre_identified_role")
+                        if pre_identified_role:
+                            next_question = f"I see you're focused on a {pre_identified_role} role. Please provide some additional details:\n\n1. Industry (e.g., Technology, Healthcare, Finance)\n2. Seniority level (Junior, Mid, Senior, Executive)\n3. Any specific specialization for this {pre_identified_role} role?"
+                        else:
+                            next_question = "Please provide the following details about the position:\n\n1. Job title\n2. Industry (e.g., Technology, Healthcare, Finance)\n3. Seniority level (Junior, Mid, Senior, Executive)"
+                        next_step = 2
+                        
+                    elif current_step == 2:  # Basic role information (job title, industry, seniority)
+                        # Parse the multi-part response - we'll do a simple extraction
+                        lines = user_response.strip().split('\n')
+                        
+                        # Default values in case parsing fails
+                        pre_identified_role = collected_info.get("pre_identified_role")
+                        role_title = pre_identified_role if pre_identified_role else "Unspecified Role"
+                        industry = "Technology"
+                        seniority = "Mid-level"
+                        
+                        # Try to extract information from the response
+                        for line in lines:
+                            line = line.strip()
+                            if line and not line.startswith(('1.', '2.', '3.')):
+                                if not role_title or role_title == "Unspecified Role":
+                                    role_title = line
+                                elif not industry or industry == "Technology":
+                                    industry = line
+                                elif not seniority or seniority == "Mid-level":
+                                    seniority = line
+                                    
+                        # If the response wasn't structured as expected, try to make best guesses
+                        if len(lines) >= 3:
+                            if not pre_identified_role:  # Only replace if we don't have a pre-identified role
+                                if not role_title or role_title == "Unspecified Role":
+                                    role_title = lines[0].replace('1.', '').strip()
+                            if not industry or industry == "Technology":
+                                industry = lines[1].replace('2.', '').strip()
+                            if not seniority or seniority == "Mid-level":
+                                seniority = lines[2].replace('3.', '').strip()
+                        elif len(user_response.split()) >= 3 and not pre_identified_role:
+                            # Just use the whole response as role title if parsing failed
+                            role_title = user_response
+                            
+                        collected_info["role_title"] = role_title
+                        collected_info["industry"] = industry
+                        collected_info["seniority"] = seniority
+                        
+                        next_question = "What are the top 3 specific skills or qualifications that are absolutely essential for this role?"
+                        next_step = 3
+                        
+                    elif current_step == 3:  # Essential skills
+                        collected_info["key_skills"] = user_response
+                        
+                        next_question = "Tell me about your company culture and working environment. What makes your workplace unique or appealing to candidates?"
+                        next_step = 4
+                        
+                    elif current_step == 4:  # Company culture
+                        collected_info["company_culture"] = user_response
+                        
+                        next_question = "Where are you planning to source candidates from? (e.g., LinkedIn, professional networks, referrals, job boards, etc.)"
+                        next_step = 5
+                        
+                    elif current_step == 5:  # Sourcing channels
+                        collected_info["sourcing_channels"] = user_response
+                        
+                        next_question = "What are the key selling points or benefits that would attract candidates to this position? (e.g., remote work, career growth, cutting-edge technology)"
+                        next_step = 6
+                        
+                    elif current_step == 6:  # Key benefits
+                        collected_info["company_benefits"] = user_response
+                        
+                        next_question = "What's your timeline for filling this position? Is this an urgent need or a longer-term recruitment effort?"
+                        next_step = 7
+                        
+                    elif current_step == 7:  # Timeline
+                        collected_info["timeline"] = user_response
+                        
+                        next_question = "Are there any common objections or concerns that candidates typically have about this role or your company?"
+                        next_step = 8
+                        
+                    elif current_step == 8:  # Objections
+                        collected_info["candidate_objections"] = user_response
+                        
+                        next_question = "Would you like to include post-outreach interview steps (e.g., screening call, technical interview, etc.) in your sequence? (Yes/No)"
+                        next_step = 9
+                        
+                    elif current_step == 9:  # Interview steps
+                        include_interviews = "yes" in user_response.lower()
+                        collected_info["include_interviews"] = include_interviews
+                        
+                        # Final question about any specific campaign ideas or approaches
+                        next_question = "Is there anything specific or unique about this campaign that you'd like to incorporate into the sequence? (e.g., special events, webinars, or referral programs)"
+                        next_step = 10
+                        
+                    elif current_step == 10:  # Special campaign elements
+                        collected_info["special_elements"] = user_response
+                        
+                        # Now we have all the information, generate the sequence
+                        return self._generate_final_sequence(collected_info)
+                    
+                    # Return the next question
+                    return json.dumps({
+                        "status": "question",
+                        "question": next_question,
+                        "sequence_info": {
+                            "step": next_step,
+                            "collected_info": collected_info
+                        }
+                    })
+            except (json.JSONDecodeError, KeyError) as e:
+                # Not a structured response, continue with normal processing
+                print("Not a structured response, continuing with normal processing")
+                pass
+            
+            # Normal processing for generating a sequence
             analysis_prompt = f"""Analyze these recruiting requirements and return ONLY a JSON object with the following fields:
             Requirements: {requirements}
 
@@ -223,9 +379,34 @@ Do not include any other text before or after the JSON."""
             analysis = self.llm([HumanMessage(content=analysis_prompt)])
             parsed_analysis = json.loads(analysis.content.strip())
             
-            # Get sequence structure based on analysis
-            sequence_prompt = f"""Generate a recruiting sequence as a JSON array based on this analysis:
-{json.dumps(parsed_analysis, indent=2)}
+            return self._generate_final_sequence(parsed_analysis)
+            
+        except json.JSONDecodeError as e:
+            return json.dumps({
+                "error": "Failed to parse LLM response",
+                "details": str(e),
+                "raw_response": analysis.content if 'analysis' in locals() else None
+            })
+        except Exception as e:
+            return json.dumps({
+                "error": "Failed to generate sequence",
+                "details": str(e),
+                "raw_response": analysis.content if 'analysis' in locals() else None
+            })
+        
+    def _generate_final_sequence(self, collected_info: dict) -> str:
+        """Generate a final recruiting sequence based on collected information.
+        
+        Args:
+            collected_info: Dictionary containing all collected recruiting information
+            
+        Returns:
+            str: JSON string containing the generated sequence
+        """
+        try:
+            # Get sequence structure based on collected info
+            sequence_prompt = f"""Generate a recruiting sequence as a JSON array based on this information:
+{json.dumps(collected_info, indent=2)}
 
 IMPORTANT: Respond with ONLY a JSON array of sequence steps. Each step must have these exact fields:
 [
@@ -240,10 +421,34 @@ IMPORTANT: Respond with ONLY a JSON array of sequence steps. Each step must have
 ]
 
 The sequence should:
-1. Match the seniority level ({parsed_analysis['seniority']})
-2. Be appropriate for {parsed_analysis['industry']} industry
-3. Highlight these skills: {', '.join(parsed_analysis['key_skills'])}
-4. Reflect {parsed_analysis['company_type']} company culture
+1. Match the overall campaign idea: {collected_info.get('campaign_idea', 'effective recruiting outreach')}
+2. Be appropriate for the {collected_info.get('seniority', 'Mid-level')} level in the {collected_info.get('industry', 'Technology')} industry
+3. Highlight these essential skills: {collected_info.get('key_skills', 'relevant skills')}
+4. Reflect the company culture: {collected_info.get('company_culture', 'positive and collaborative')}
+5. Be designed for these sourcing channels: {collected_info.get('sourcing_channels', 'LinkedIn and job boards')}
+6. Highlight these benefits: {collected_info.get('company_benefits', 'competitive benefits')}
+7. Address these potential objections: {collected_info.get('candidate_objections', 'common concerns')}
+8. Consider the recruiting timeline: {collected_info.get('timeline', 'standard')}
+9. Include these special elements if applicable: {collected_info.get('special_elements', '')}
+
+{
+"include_interviews" in collected_info and collected_info.get('include_interviews', False) and
+'''
+10. Include post-outreach interview steps such as:
+   - Scheduling a screening call
+   - Technical/skills assessment 
+   - Interview rounds with the team
+   - Final decision and offer
+''' or ''
+}
+
+The sequence should include a mix of outreach methods, with appropriate delays between steps. 
+Typically include 4-6 steps of initial outreach with increasing personalization and value in each message.
+{
+"include_interviews" in collected_info and collected_info.get('include_interviews', False) and
+"Additionally, include 3-4 more steps for the interview process after initial contact is established."
+or ""
+}
 
 Do not include any other text before or after the JSON array."""
             
@@ -253,10 +458,12 @@ Do not include any other text before or after the JSON array."""
             # Add metadata to the sequence
             final_sequence = {
                 "metadata": {
-                    "role": parsed_analysis["role_title"],
-                    "industry": parsed_analysis["industry"],
-                    "seniority": parsed_analysis["seniority"],
-                    "company_type": parsed_analysis["company_type"],
+                    "campaign_idea": collected_info.get("campaign_idea", "Effective Recruiting Campaign"),
+                    "role": collected_info.get("role_title", "Unspecified Role"),
+                    "industry": collected_info.get("industry", "Technology"),
+                    "seniority": collected_info.get("seniority", "Mid-level"),
+                    "company_culture": collected_info.get("company_culture", "Positive work environment"),
+                    "includes_interview_steps": collected_info.get("include_interviews", False),
                     "generated_at": datetime.now(UTC).isoformat()
                 },
                 "steps": sequence
@@ -264,17 +471,10 @@ Do not include any other text before or after the JSON array."""
             
             return json.dumps(final_sequence, indent=2)
             
-        except json.JSONDecodeError as e:
-            return json.dumps({
-                "error": "Failed to parse LLM response",
-                "details": str(e),
-                "raw_response": analysis.content if 'analysis' in locals() else None
-            })
         except Exception as e:
             return json.dumps({
-                "error": "Failed to generate sequence",
-                "details": str(e),
-                "raw_response": analysis.content if 'analysis' in locals() else None
+                "error": "Failed to generate final sequence",
+                "details": str(e)
             })
 
     def _modify_sequence(self, modifications: str) -> str:
@@ -526,66 +726,6 @@ Do not include any other text before or after the JSON array."""
         except Exception as e:
             return json.dumps({"error": f"Failed to merge candidate data: {str(e)}"})
 
-    def _generate_job_description(self, requirements: str) -> str:
-        """Generate a job description based on the given requirements.
-        
-        Args:
-            requirements (str): String containing role details and requirements
-            
-        Returns:
-            str: JSON string containing the generated job description
-        """
-        try:
-            # First, analyze the requirements to extract key information
-            analysis_prompt = f"""Analyze these job requirements and return ONLY a JSON object with the following fields:
-            Requirements: {requirements}
-
-IMPORTANT: Respond with ONLY a JSON object containing these exact fields:
-{{
-    "role_title": "the job title",
-    "department": "the department",
-    "location": "the location (remote/hybrid/onsite)",
-    "employment_type": "full-time/part-time/contract",
-    "experience_level": "entry/mid/senior/lead",
-    "key_skills": ["skill1", "skill2", ...],
-    "responsibilities": ["responsibility1", "responsibility2", ...],
-    "requirements": ["requirement1", "requirement2", ...],
-    "preferred_qualifications": ["qualification1", "qualification2", ...],
-    "benefits": ["benefit1", "benefit2", ...]
-}}
-
-Do not include any other text before or after the JSON."""
-            
-            analysis = self.llm([HumanMessage(content=analysis_prompt)])
-            parsed_analysis = json.loads(analysis.content.strip())
-            
-            # Generate the job description based on the analysis
-            description_prompt = f"""Generate a professional job description based on this analysis:
-{json.dumps(parsed_analysis, indent=2)}
-
-IMPORTANT: Respond with ONLY a JSON object containing these exact fields:
-{{
-    "title": "Job Title",
-    "company": "Company Name",
-    "location": "Location",
-    "employment_type": "Employment Type",
-    "description": "Full job description text",
-    "requirements": "Requirements section text",
-    "benefits": "Benefits section text"
-}}
-
-The description should be well-formatted, professional, and include all the key information from the analysis.
-Do not include any other text before or after the JSON."""
-            
-            description = self.llm([HumanMessage(content=description_prompt)])
-            return description.content.strip()
-            
-        except Exception as e:
-            return json.dumps({
-                "status": "error",
-                "message": f"Error generating job description: {str(e)}"
-            })
-
     def _edit_sequence_step(self, input_data: str) -> str:
         """Edit a specific step in the recruiting sequence.
         
@@ -693,6 +833,95 @@ Do not include any other text before or after the JSON."""
             str: A JSON string containing the LLM response and tool result
         """
         try:
+            # Check for direct campaign requests with role specifics
+            direct_campaign_keywords = ["email campaign", "recruiting campaign", "hiring campaign", "outreach campaign"]
+            job_titles = ["software engineer", "product manager", "data scientist", "developer", 
+                         "designer", "manager", "director", "recruiter", "engineer", "sales"]
+            
+            is_direct_campaign_request = False
+            for keyword in direct_campaign_keywords:
+                if keyword in message.lower():
+                    # Check if it includes a job title
+                    for title in job_titles:
+                        if title in message.lower():
+                            is_direct_campaign_request = True
+                            break
+                    if is_direct_campaign_request:
+                        break
+            
+            if is_direct_campaign_request:
+                # Call generate_sequence directly
+                print(f"Identified direct campaign request: '{message}', routing to generate_sequence")
+                tool_result = self._generate_sequence(message)
+                
+                try:
+                    result_data = json.loads(tool_result)
+                    if result_data.get("status") == "question":
+                        # Continue with questions
+                        return json.dumps({
+                            "status": "success",
+                            "llm_response": {"action": "generate_sequence", "action_input": message},
+                            "tool_result": tool_result,
+                            "chat_response": result_data.get("question", "Let's create a recruiting sequence."),
+                            "error": None
+                        })
+                except (json.JSONDecodeError, KeyError):
+                    pass  # If anything fails, continue with normal processing
+            
+            # Check for continuing recruiting sequence creation
+            try:
+                # Look for the last AI message in chat history
+                last_ai_message = None
+                for msg in reversed(chat_history):
+                    if msg["sender"] == "ai":
+                        try:
+                            response_data = json.loads(msg["text"])
+                            if "status" in response_data and response_data["status"] == "question" and "sequence_info" in response_data:
+                                last_ai_message = response_data
+                                break
+                        except (json.JSONDecodeError, KeyError):
+                            # Not a structured JSON message, continue searching
+                            continue
+                
+                # If we have a sequence question and user response, package it for the next step
+                if last_ai_message and "sequence_info" in last_ai_message:
+                    # Create a structured input for the _generate_sequence method
+                    input_data = {
+                        "sequence_info": last_ai_message["sequence_info"],
+                        "user_response": message
+                    }
+                    
+                    # Call the sequence generator with the structured data
+                    tool_result = self._generate_sequence(json.dumps(input_data))
+                    
+                    try:
+                        result_data = json.loads(tool_result)
+                        if result_data.get("status") == "question":
+                            # Continue with more questions
+                            return json.dumps({
+                                "status": "success",
+                                "llm_response": {"action": "generate_sequence", "action_input": message},
+                                "tool_result": tool_result,
+                                "chat_response": result_data["question"],
+                                "error": None
+                            })
+                        elif "metadata" in result_data and "steps" in result_data:
+                            # Final sequence created
+                            return json.dumps({
+                                "status": "success",
+                                "llm_response": {"action": "generate_sequence", "action_input": message},
+                                "tool_result": tool_result,
+                                "chat_response": f"I've created a recruiting sequence for a {result_data['metadata']['role']} position. Please review it and let me know if you'd like any changes.",
+                                "error": None
+                            })
+                    except (json.JSONDecodeError, KeyError):
+                        # Not a valid response, continue with normal processing
+                        pass
+            except Exception as e:
+                print(f"Error processing recruiting sequence flow: {str(e)}")
+                # If there's an error, continue with normal processing
+                pass
+            
             # Format the chat history into messages
             formatted_chat_history = [
                 HumanMessage(content=msg["text"]) if msg["sender"] == "user" 
@@ -755,6 +984,7 @@ Do not include any other text before or after the JSON."""
                     result_json = json.loads(tool_result)
                     # Check if we need to emit a sequence update
                     if result_json.get("status") == "success" and "sequence" in result_json:
+                        from flask_socketio import emit
                         # Emit a sequence_updated event to update all clients
                         try:
                             # This might fail if not in a SocketIO context

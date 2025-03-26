@@ -118,16 +118,61 @@ def handle_chat_message(data):
         display_message = response
         try:
             response_data = json.loads(response)
-            if response_data.get("status") == "success" and response_data.get("tool_result"):
-                # Extract just the tool result for display
-                display_message = response_data["tool_result"]
-                
+            if response_data.get("status") == "success":
+                # Extract just the chat response for display
+                if response_data.get("chat_response"):
+                    display_message = response_data["chat_response"]
+                elif response_data.get("tool_result"):
+                    # Try to extract from tool result if no chat response
+                    display_message = response_data["tool_result"]
+                    
+                # Check if this is part of the sequence creation flow
+                try:
+                    tool_result = json.loads(response_data.get("tool_result", "{}"))
+                    if tool_result.get("status") == "question" and "sequence_info" in tool_result:
+                        # For sequence questions, use the question as the display message
+                        display_message = tool_result["question"]
+                        
+                        # Check if this is the first question with an intro message
+                        if "message" in tool_result:
+                            display_message = f"{tool_result['message']}\n\n{display_message}"
+                except json.JSONDecodeError:
+                    # If not a JSON, keep the display message as is
+                    pass
+                    
                 # Check if the tool result is a JSON sequence
                 try:
                     tool_result_data = json.loads(display_message)
                     if isinstance(tool_result_data, dict) and "metadata" in tool_result_data and "steps" in tool_result_data:
-                        # For sequence results, use a simple confirmation message
-                        display_message = "I've created a recruiting sequence based on your requirements."
+                        # For sequence results, use a more detailed confirmation message
+                        role = tool_result_data['metadata']['role']
+                        industry = tool_result_data['metadata']['industry']
+                        seniority = tool_result_data['metadata']['seniority']
+                        includes_interviews = tool_result_data['metadata'].get('includes_interview_steps', False)
+                        campaign_idea = tool_result_data['metadata'].get('campaign_idea', '')
+                        
+                        display_message = f"I've created a recruiting sequence for a {seniority} {role} position in the {industry} industry."
+                        
+                        # Add campaign idea if available
+                        if campaign_idea:
+                            display_message += f"\n\nThis sequence is designed to support your campaign idea: {campaign_idea}"
+                        
+                        # Count outreach steps and interview steps
+                        outreach_steps = 0
+                        interview_steps = 0
+                        for step in tool_result_data['steps']:
+                            step_type = step.get('type', '').lower()
+                            if step_type in ['email', 'linkedin', 'call', 'text', 'message']:
+                                outreach_steps += 1
+                            elif any(keyword in step.get('content', '').lower() for keyword in ['interview', 'screening', 'assessment', 'meeting', 'offer']):
+                                interview_steps += 1
+                        
+                        display_message += f"\n\nThe sequence includes {outreach_steps} outreach steps"
+                        if includes_interviews and interview_steps > 0:
+                            display_message += f" and {interview_steps} post-outreach interview steps"
+                        display_message += "."
+                        
+                        display_message += "\n\nPlease review it and let me know if you'd like any changes."
                 except json.JSONDecodeError:
                     # If not a JSON, use the tool result as is
                     pass
@@ -149,6 +194,18 @@ def handle_chat_message(data):
         try:
             response_data = json.loads(response)
             if response_data.get("status") == "success" and response_data.get("tool_result"):
+                # Check if this is a sequence from the generate_sequence tool
+                if response_data.get("llm_response", {}).get("action") == "generate_sequence":
+                    try:
+                        # First try parsing the tool_result directly
+                        sequence_data = json.loads(response_data.get("tool_result"))
+                        if "metadata" in sequence_data and "steps" in sequence_data:
+                            # Emit the sequence update
+                            emit('sequence_updated', {'data': sequence_data})
+                            print("Emitted sequence_updated from generate_sequence action")
+                    except json.JSONDecodeError:
+                        pass
+                
                 # Check if this is an edit_sequence_step action
                 if response_data.get("llm_response", {}).get("action") == "edit_sequence_step":
                     try:
