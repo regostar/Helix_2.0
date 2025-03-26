@@ -8,62 +8,21 @@ import {
 import ChatBar from './components/ChatBar';
 import Workspace from './components/Workspace';
 import { useSocket } from './components/SocketContext';
+import { useSuggestedPrompts } from './hooks/useSuggestedPrompts';
 
 // Create theme
 const theme = createTheme({
   palette: {
     mode: 'light',
     primary: {
-      main: '#2563eb', // Modern blue
+      main: '#2563eb',
     },
     secondary: {
-      main: '#10b981', // Modern teal
+      main: '#4f46e5',
     },
     background: {
       default: '#f8fafc',
       paper: '#ffffff',
-    },
-    text: {
-      primary: '#1e293b',
-      secondary: '#64748b',
-    },
-  },
-  typography: {
-    fontFamily: '"Inter", "Roboto", "Helvetica", "Arial", sans-serif',
-    h5: {
-      fontWeight: 600,
-      letterSpacing: '-0.02em',
-    },
-    subtitle1: {
-      letterSpacing: '-0.01em',
-    },
-  },
-  shape: {
-    borderRadius: 8,
-  },
-  components: {
-    MuiButton: {
-      styleOverrides: {
-        root: {
-          textTransform: 'none',
-          fontWeight: 600,
-        },
-      },
-    },
-    MuiPaper: {
-      styleOverrides: {
-        root: {
-          boxShadow: '0 1px 3px 0 rgb(0 0 0 / 0.1), 0 1px 2px -1px rgb(0 0 0 / 0.1)',
-        },
-      },
-    },
-    MuiAppBar: {
-      styleOverrides: {
-        root: {
-          boxShadow: 'none',
-          borderBottom: '1px solid #e2e8f0',
-        },
-      },
     },
   },
 });
@@ -118,6 +77,9 @@ interface SequenceMetadata {
   seniority: string;
   company_type: string;
   generated_at: string;
+  campaign_idea?: string;
+  company_culture?: string;
+  includes_interview_steps?: boolean;
 }
 
 interface Sequence {
@@ -157,6 +119,7 @@ function App() {
   const [sequence, setSequence] = useState<Sequence | null>(null);
   const [socketId, setSocketId] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
+  const suggestedPrompts = useSuggestedPrompts();
 
   // Add state for panel sizes
   const [panelSizes, setPanelSizes] = useState(() => {
@@ -417,14 +380,14 @@ function App() {
 
   const handleSendMessage = (message: string) => {
     if (!isConnected) return;
-
+    
     const newMessage: Message = {
       id: Date.now().toString(),
       text: message,
       sender: 'user',
       timestamp: new Date()
     };
-
+    
     setMessages(prev => [...prev, newMessage]);
     setIsLoading(true); // Start loading when message sent
     
@@ -469,14 +432,16 @@ function App() {
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
-      <Box sx={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
-        <AppBar position="static" color="default" elevation={0}>
-          <Toolbar sx={{ justifyContent: 'space-between' }}>
-            <Typography variant="h6" component="div" sx={{ fontWeight: 600 }}>
-              Helix Recruiting
-            </Typography>
-            <Typography variant="body2" color="text.secondary">
-              {isConnected ? 'Connected to server' : 'Disconnected'}
+      <Box sx={{ 
+        display: 'flex', 
+        flexDirection: 'column',
+        height: '100vh',
+        overflow: 'hidden'
+      }}>
+        <AppBar position="static" elevation={0} sx={{ zIndex: 1000 }}>
+          <Toolbar>
+            <Typography variant="h6" component="div" sx={{ flexGrow: 1 }}>
+              Helix
             </Typography>
           </Toolbar>
         </AppBar>
@@ -504,6 +469,7 @@ function App() {
                 onSendMessage={handleSendMessage} 
                 isConnected={isConnected}
                 isLoading={isLoading}
+                suggestedPrompts={suggestedPrompts}
               />
             </Panel>
             

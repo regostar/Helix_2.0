@@ -8,10 +8,14 @@ import {
   Tooltip,
   Fade,
   CircularProgress,
+  Button,
+  Chip,
+  Paper,
 } from '@mui/material';
 import SendIcon from '@mui/icons-material/Send';
 import ChatOutlinedIcon from '@mui/icons-material/ChatOutlined';
 import PersonOutlineOutlinedIcon from '@mui/icons-material/PersonOutlineOutlined';
+import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome';
 import { styled, keyframes } from '@mui/material/styles';
 import { alpha } from '@mui/material/styles';
 
@@ -23,11 +27,18 @@ interface Message {
   timestamp: Date;
 }
 
+interface SuggestedPrompt {
+  id: string;
+  text: string;
+  description: string;
+}
+
 interface ChatBarProps {
   messages: Message[];
   onSendMessage: (message: string) => void;
   isConnected: boolean;
   isLoading: boolean;
+  suggestedPrompts?: SuggestedPrompt[];
 }
 
 // Create keyframes for the typing animation
@@ -78,6 +89,33 @@ const MessageBubble = styled(Box)<{ isUser: boolean }>(({ theme, isUser }) => ({
   border: isUser 
     ? `1px solid ${alpha(theme.palette.primary.main, 0.2)}`
     : `1px solid ${theme.palette.divider}`,
+}));
+
+const PromptSuggestionContainer = styled(Box)(({ theme }) => ({
+  display: 'flex',
+  flexWrap: 'wrap',
+  gap: theme.spacing(1),
+  marginBottom: theme.spacing(2),
+  justifyContent: 'center',
+}));
+
+const PromptSuggestion = styled(Paper)(({ theme }) => ({
+  padding: theme.spacing(2),
+  borderRadius: theme.shape.borderRadius * 1.5,
+  cursor: 'pointer',
+  transition: 'all 0.2s ease-in-out',
+  border: `1px solid ${theme.palette.divider}`,
+  display: 'flex',
+  flexDirection: 'column',
+  alignItems: 'flex-start',
+  width: 'calc(50% - 8px)',
+  maxWidth: '350px',
+  backgroundColor: theme.palette.background.paper,
+  '&:hover': {
+    borderColor: theme.palette.primary.main,
+    backgroundColor: alpha(theme.palette.primary.main, 0.05),
+    transform: 'translateY(-2px)',
+  },
 }));
 
 const TypingDot = styled('span')<{ index: number }>(({ theme, index }) => ({
@@ -135,7 +173,13 @@ const ChatHeader = styled(Box)(({ theme }) => ({
   gap: theme.spacing(1),
 }));
 
-const ChatBar: React.FC<ChatBarProps> = ({ messages, onSendMessage, isConnected, isLoading }) => {
+const ChatBar: React.FC<ChatBarProps> = ({ 
+  messages, 
+  onSendMessage, 
+  isConnected, 
+  isLoading,
+  suggestedPrompts = [] 
+}) => {
   const [message, setMessage] = useState('');
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -152,6 +196,12 @@ const ChatBar: React.FC<ChatBarProps> = ({ messages, onSendMessage, isConnected,
     if (message.trim() && isConnected && !isLoading) {
       onSendMessage(message.trim());
       setMessage('');
+    }
+  };
+
+  const handlePromptClick = (promptText: string) => {
+    if (isConnected && !isLoading) {
+      onSendMessage(promptText);
     }
   };
 
@@ -204,25 +254,54 @@ const ChatBar: React.FC<ChatBarProps> = ({ messages, onSendMessage, isConnected,
       </ChatHeader>
       <MessagesContainer>
         {messages.length === 0 && (
-          <Box 
-            sx={{ 
-              display: 'flex', 
-              flexDirection: 'column', 
-              alignItems: 'center', 
-              justifyContent: 'center',
-              height: '100%',
-              gap: 2,
-              color: 'text.secondary',
-              px: 4,
-              textAlign: 'center'
-            }}
-          >
-            <ChatOutlinedIcon sx={{ fontSize: 40, opacity: 0.5 }} />
-            <Typography variant="h6">Start a conversation</Typography>
-            <Typography variant="body2">
-              Ask the AI to create a recruiting sequence for any role or position.
-            </Typography>
-          </Box>
+          <>
+            <Box 
+              sx={{ 
+                display: 'flex', 
+                flexDirection: 'column', 
+                alignItems: 'center', 
+                justifyContent: 'center',
+                height: '50%',
+                gap: 2,
+                color: 'text.secondary',
+                px: 4,
+                textAlign: 'center'
+              }}
+            >
+              <ChatOutlinedIcon sx={{ fontSize: 40, opacity: 0.5 }} />
+              <Typography variant="h6">Start a conversation</Typography>
+              <Typography variant="body2">
+                Ask the AI to create a recruiting sequence for any role or position.
+              </Typography>
+            </Box>
+            
+            {suggestedPrompts.length > 0 && (
+              <Box sx={{ mt: 'auto', mb: 4 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', mb: 2, justifyContent: 'center' }}>
+                  <AutoAwesomeIcon fontSize="small" sx={{ mr: 1, color: 'primary.main' }} />
+                  <Typography variant="subtitle2" color="text.primary">
+                    Try these suggestions
+                  </Typography>
+                </Box>
+                <PromptSuggestionContainer>
+                  {suggestedPrompts.map((prompt) => (
+                    <PromptSuggestion 
+                      key={prompt.id}
+                      onClick={() => handlePromptClick(prompt.text)}
+                      elevation={0}
+                    >
+                      <Typography variant="subtitle2" fontWeight={600} gutterBottom>
+                        {prompt.text}
+                      </Typography>
+                      <Typography variant="caption" color="text.secondary">
+                        {prompt.description}
+                      </Typography>
+                    </PromptSuggestion>
+                  ))}
+                </PromptSuggestionContainer>
+              </Box>
+            )}
+          </>
         )}
         
         {messages.map((msg) => (
@@ -253,6 +332,7 @@ const ChatBar: React.FC<ChatBarProps> = ({ messages, onSendMessage, isConnected,
         
         <div ref={messagesEndRef} />
       </MessagesContainer>
+      
       <form onSubmit={handleSubmit}>
         <InputContainer>
           <TextField

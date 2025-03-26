@@ -9,6 +9,8 @@ import json
 from datetime import datetime, UTC
 from langchain.schema import HumanMessage
 from sqlalchemy.exc import SQLAlchemyError
+from dateutil.tz import UTC
+import urllib
 
 # Load environment variables
 load_dotenv()
@@ -76,10 +78,39 @@ class ChatHistory(db.Model):
 # Initialize the recruiting agent with database instance and Sequence model
 agent = RecruitingAgent(db_instance=db, sequence_model=Sequence)
 
+# Define suggested prompts
+SUGGESTED_PROMPTS = [
+    {
+        "id": "software-dev-sequence",
+        "text": "Create a recruiting sequence for a software developer",
+        "description": "Generate a customized outreach sequence for hiring software developers"
+    },
+    {
+        "id": "data-scientist-sequence",
+        "text": "Create a recruiting sequence for a data scientist",
+        "description": "Generate a customized outreach sequence for hiring data scientists"
+    },
+    {
+        "id": "product-manager-sequence",
+        "text": "Create a recruiting sequence for a product manager",
+        "description": "Generate a customized outreach sequence for hiring product managers"
+    },
+    {
+        "id": "senior-engineer-sequence",
+        "text": "Create a recruiting sequence for a senior engineer",
+        "description": "Generate a customized outreach sequence for hiring senior engineers"
+    }
+]
+
 # Routes
 @app.route('/api/health', methods=['GET'])
 def health_check():
     return jsonify({"status": "healthy"})
+
+@app.route('/api/suggested-prompts', methods=['GET'])
+def get_suggested_prompts():
+    """Return a list of suggested prompts for the chat interface."""
+    return jsonify(SUGGESTED_PROMPTS)
 
 # Socket.IO events
 @socketio.on('connect')
@@ -88,6 +119,9 @@ def handle_connect():
     # Create a new chat history entry for this connection
     ChatHistory.get_or_create(request.sid)
     emit('connection_response', {'data': 'Connected', 'socket_id': request.sid})
+    
+    # Send suggested prompts to the client
+    emit('suggested_prompts', {'prompts': SUGGESTED_PROMPTS})
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -230,6 +264,15 @@ def handle_chat_message(data):
 
         # Send the original response to the client
         emit('chat_response', {'data': response})
+        
+        # Send new suggested prompts based on conversation context
+        try:
+            # For simplicity, we'll just send the default prompts again
+            # In a more advanced implementation, you could generate contextual suggestions
+            emit('suggested_prompts', {'prompts': SUGGESTED_PROMPTS})
+        except Exception as e:
+            print(f"Error sending suggested prompts: {str(e)}")
+            
     except Exception as e:
         print(f"Error in handle_chat_message: {str(e)}")
         emit('chat_response', {'data': f"Error processing message: {str(e)}"})
@@ -345,6 +388,12 @@ def handle_process_edit(data):
     except Exception as e:
         print(f"Error in handle_process_edit: {str(e)}")
         emit('error', {'data': f"Error processing edit: {str(e)}"})
+
+@socketio.on('get_suggested_prompts')
+def handle_get_suggested_prompts():
+    """Send suggested prompts to the client when requested."""
+    print(f"Client {request.sid} requested suggested prompts")
+    emit('suggested_prompts', {'prompts': SUGGESTED_PROMPTS})
 
 if __name__ == '__main__':
     with app.app_context():
