@@ -48,7 +48,7 @@ npm install
 3. Set up the backend:
 ```bash
 cd backend
-python -m venv venv
+python3.12 -m venv venv
 source venv/bin/activate  # On Windows: .\venv\Scripts\activate
 pip install -r requirements.txt
 ```
@@ -63,11 +63,12 @@ pip install -r requirements.txt
 ```bash
 # Terminal 1 - Frontend
 cd frontend
+npm i
 npm start
 
 # Terminal 2 - Backend
 cd backend
-flask run
+python app.py
 ```
 
 ## Project Structure
