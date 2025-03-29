@@ -2,9 +2,9 @@ from flask import request
 from flask_socketio import emit
 from datetime import datetime, UTC
 import json
-from ..models.chat_history import ChatHistory
-from ..models.sequence import Sequence
-from ..services.agent_service import RecruitingAgent
+from models.chat_history import ChatHistory
+from models.sequence import Sequence
+from services.agent_service import RecruitingAgent
 
 # Initialize the recruiting agent
 agent = None

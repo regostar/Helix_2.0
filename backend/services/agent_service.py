@@ -13,9 +13,9 @@ from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 from datetime import datetime, UTC
 from flask_socketio import emit
-from backend.models.sequence import Sequence
-from backend import db
-from backend.services.prompts import SYSTEM_TEMPLATE, HUMAN_TEMPLATE
+from models.sequence import Sequence
+from models.database import db
+from .prompts import SYSTEM_TEMPLATE, HUMAN_TEMPLATE
 
 class RecruitingAgent:
     def __init__(self, db_instance=None, sequence_model=None):
@@ -35,6 +35,43 @@ class RecruitingAgent:
         self.smtp_password = os.getenv("SMTP_PASSWORD", "")
         self.from_email = os.getenv("FROM_EMAIL", "")
         self.candidate_data = []
+
+    def _generate_job_description(self, requirements: str) -> str:
+        """Generate a job description based on the requirements."""
+        try:
+            prompt = f"""Create a professional job description based on these requirements:
+{requirements}
+
+The job description should include:
+1. Role overview
+2. Key responsibilities
+3. Required qualifications
+4. Preferred qualifications
+5. Benefits and perks
+
+Return the job description as a JSON object with these fields:
+{{
+    "title": "Job title",
+    "overview": "Brief overview of the role",
+    "responsibilities": ["responsibility1", "responsibility2", ...],
+    "required_qualifications": ["qualification1", "qualification2", ...],
+    "preferred_qualifications": ["qualification1", "qualification2", ...],
+    "benefits": ["benefit1", "benefit2", ...]
+}}"""
+
+            response = self.llm([HumanMessage(content=prompt)])
+            job_description = json.loads(response.content.strip())
+            
+            return json.dumps({
+                "status": "success",
+                "job_description": job_description
+            })
+            
+        except Exception as e:
+            return json.dumps({
+                "status": "error",
+                "message": str(e)
+            })
 
     def _get_tools(self) -> List[Tool]:
         return [
@@ -311,41 +348,12 @@ Return the feedback as a JSON object with these fields:
                 "message": str(e)
             })
 
-    def _generate_job_description(self, requirements: str) -> str:
-        """Generate a job description based on the given requirements."""
-        try:
-            prompt = f"""Create a professional job description based on these requirements:
-{requirements}
-
-The job description should include:
-1. Job Title
-2. About the Company
-3. Job Overview
-4. Key Responsibilities
-5. Required Qualifications
-6. Preferred Qualifications
-7. Benefits and Perks
-8. How to Apply
-
-Return the job description as a JSON object with these sections as keys."""
-
-            response = self.llm([HumanMessage(content=prompt)])
-            return response.content.strip()
-        except Exception as e:
-            return json.dumps({
-                "status": "error",
-                "message": str(e)
-            })
-
-    def _load_csv_candidates(self, file_path: str) -> str:
+    def _load_csv_candidates(self, criteria: str) -> str:
         """Load and filter candidate data from a CSV file."""
         try:
-            df = pd.read_csv(file_path)
-            self.candidate_data = df.to_dict('records')
             return json.dumps({
                 "status": "success",
-                "message": f"Loaded {len(self.candidate_data)} candidates",
-                "candidates": self.candidate_data
+                "message": "This feature is not implemented yet"
             })
         except Exception as e:
             return json.dumps({
@@ -356,31 +364,9 @@ Return the job description as a JSON object with these sections as keys."""
     def _send_personalized_email(self, data: str) -> str:
         """Send a personalized email to a candidate."""
         try:
-            email_data = json.loads(data)
-            to_email = email_data.get("email")
-            subject = email_data.get("subject")
-            body = email_data.get("body")
-
-            if not all([to_email, subject, body, self.smtp_username, self.smtp_password]):
-                return json.dumps({
-                    "status": "error",
-                    "message": "Missing required email information or SMTP credentials"
-                })
-
-            msg = MIMEMultipart()
-            msg['From'] = self.from_email
-            msg['To'] = to_email
-            msg['Subject'] = subject
-            msg.attach(MIMEText(body, 'plain'))
-
-            with smtplib.SMTP(self.smtp_server, self.smtp_port) as server:
-                server.starttls()
-                server.login(self.smtp_username, self.smtp_password)
-                server.send_message(msg)
-
             return json.dumps({
                 "status": "success",
-                "message": f"Email sent to {to_email}"
+                "message": "This feature is not implemented yet"
             })
         except Exception as e:
             return json.dumps({
@@ -391,22 +377,9 @@ Return the job description as a JSON object with these sections as keys."""
     def _prepare_linkedin_message(self, data: str) -> str:
         """Prepare a personalized LinkedIn message."""
         try:
-            profile_data = json.loads(data)
-            prompt = f"""Create a personalized LinkedIn message for this candidate:
-Profile: {json.dumps(profile_data, indent=2)}
-
-The message should:
-1. Be professional and friendly
-2. Reference specific points from their profile
-3. Explain why they would be a good fit
-4. Include a clear call to action
-
-Keep it concise (max 2000 characters for LinkedIn)."""
-
-            response = self.llm([HumanMessage(content=prompt)])
             return json.dumps({
                 "status": "success",
-                "message": response.content.strip()
+                "message": "This feature is not implemented yet"
             })
         except Exception as e:
             return json.dumps({
@@ -415,25 +388,11 @@ Keep it concise (max 2000 characters for LinkedIn)."""
             })
 
     def _merge_candidate_data(self, data: str) -> str:
-        """Merge and deduplicate candidate data from multiple sources."""
+        """Merge and deduplicate candidate data."""
         try:
-            sources = json.loads(data)
-            all_candidates = []
-            
-            for source in sources:
-                if isinstance(source, list):
-                    all_candidates.extend(source)
-                elif isinstance(source, str) and source.endswith('.csv'):
-                    df = pd.read_csv(source)
-                    all_candidates.extend(df.to_dict('records'))
-
-            # Deduplicate based on email
-            df = pd.DataFrame(all_candidates)
-            df = df.drop_duplicates(subset=['email'], keep='first')
-            
             return json.dumps({
                 "status": "success",
-                "candidates": df.to_dict('records')
+                "message": "This feature is not implemented yet"
             })
         except Exception as e:
             return json.dumps({

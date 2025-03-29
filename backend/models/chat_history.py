@@ -1,5 +1,5 @@
 from datetime import datetime, UTC
-from backend import db
+from .database import db
 
 class ChatHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)

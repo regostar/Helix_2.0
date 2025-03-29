@@ -2,10 +2,10 @@ from flask import Flask
 from flask_socketio import SocketIO
 from flask_cors import CORS
 from sqlalchemy.exc import SQLAlchemyError
-from backend.config.config import Config
-from backend.routes.http_routes import init_http_routes
-from backend.routes.socket_routes import init_socket_routes
-from backend import db
+from config.config import Config
+from routes.http_routes import init_http_routes
+from routes.socket_routes import init_socket_routes
+from models.database import db
 
 # Initialize Flask app
 app = Flask(__name__)
@@ -21,6 +21,7 @@ try:
     db.init_app(app)
     # Test the database connection
     with app.app_context():
+        db.create_all()  # Create all tables
         db.engine.connect()
     print("Successfully connected to PostgreSQL database")
 except SQLAlchemyError as e:
