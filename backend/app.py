@@ -9,6 +9,13 @@ import json
 from datetime import datetime, UTC
 from langchain.schema import HumanMessage
 from sqlalchemy.exc import SQLAlchemyError
+from config.config import (
+    SQLALCHEMY_DATABASE_URI,
+    SQLALCHEMY_TRACK_MODIFICATIONS,
+    SQLALCHEMY_ENGINE_OPTIONS
+)
+from models.sequence import Sequence
+from models.chat_history import ChatHistory
 
 # Load environment variables
 load_dotenv()
@@ -18,21 +25,9 @@ app = Flask(__name__)
 CORS(app, resources={r"/*": {"origins": "*"}})
 
 # Configure database
-database_url = os.getenv('DATABASE_URL')
-if not database_url:
-    raise ValueError("DATABASE_URL environment variable is not set")
-
-# Handle Heroku's DATABASE_URL format if present
-if database_url.startswith("postgres://"):
-    database_url = database_url.replace("postgres://", "postgresql://", 1)
-
-app.config['SQLALCHEMY_DATABASE_URI'] = database_url
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
-    'pool_size': 10,
-    'pool_recycle': 3600,
-    'pool_pre_ping': True
-}
+app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
+app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
+app.config['SQLALCHEMY_ENGINE_OPTIONS'] = SQLALCHEMY_ENGINE_OPTIONS
 
 try:
     db = SQLAlchemy(app)
@@ -48,30 +43,6 @@ except SQLAlchemyError as e:
 socketio = SocketIO(app, 
                    cors_allowed_origins="*",
                    async_mode='eventlet')
-
-# Models
-class Sequence(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    title = db.Column(db.String(200), nullable=False)
-    steps = db.Column(db.JSON, nullable=False)
-    created_at = db.Column(db.DateTime, server_default=db.func.now())
-    updated_at = db.Column(db.DateTime, server_default=db.func.now(), onupdate=db.func.now())
-
-class ChatHistory(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    socket_id = db.Column(db.String(100), nullable=False)
-    messages = db.Column(db.JSON, nullable=False, default=list)
-    created_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC))
-    updated_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
-
-    @staticmethod
-    def get_or_create(socket_id):
-        chat_history = ChatHistory.query.filter_by(socket_id=socket_id).first()
-        if not chat_history:
-            chat_history = ChatHistory(socket_id=socket_id, messages=[])
-            db.session.add(chat_history)
-            db.session.commit()
-        return chat_history
 
 # Initialize the recruiting agent with database instance and Sequence model
 agent = RecruitingAgent(db_instance=db, sequence_model=Sequence)

@@ -16,6 +16,14 @@ import datetime
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime, UTC
 from flask_socketio import emit
+from config.config import (
+    SMTP_SERVER,
+    SMTP_PORT,
+    SMTP_USERNAME,
+    SMTP_PASSWORD,
+    FROM_EMAIL,
+    OPENAI_API_KEY
+)
 
 load_dotenv()
 
@@ -71,11 +79,10 @@ Sequence = None
 
 class RecruitingAgent:
     def __init__(self, db_instance=None, sequence_model=None):
-        global db, Sequence
         self.llm = ChatOpenAI(
             temperature=0.7,
             model="gpt-4",
-            openai_api_key=os.getenv("OPENAI_API_KEY"),
+            openai_api_key=OPENAI_API_KEY,
         )
         self.db = db_instance
         # Set the global db instance
@@ -88,11 +95,11 @@ class RecruitingAgent:
         self.prompt = self._create_prompt()
         self.output_parser = self._create_output_parser()
         self.agent = self._create_agent()
-        self.smtp_server = os.getenv("SMTP_SERVER", "smtp.gmail.com")
-        self.smtp_port = int(os.getenv("SMTP_PORT", "587"))
-        self.smtp_username = os.getenv("SMTP_USERNAME", "")
-        self.smtp_password = os.getenv("SMTP_PASSWORD", "")
-        self.from_email = os.getenv("FROM_EMAIL", "")
+        self.smtp_server = SMTP_SERVER
+        self.smtp_port = SMTP_PORT
+        self.smtp_username = SMTP_USERNAME
+        self.smtp_password = SMTP_PASSWORD
+        self.from_email = FROM_EMAIL
         self.candidate_data = []
 
     def _get_tools(self) -> List[Tool]:
