@@ -11,10 +11,12 @@ class ChatHistory(db.Model):
     updated_at = db.Column(db.DateTime, default=lambda: datetime.now(UTC), onupdate=lambda: datetime.now(UTC))
 
     @staticmethod
-    def get_or_create(socket_id):
-        chat_history = ChatHistory.query.filter_by(socket_id=socket_id).first()
+    def get_or_create(socket_id, session=None):
+        if session is None:
+            session = db.session
+        chat_history = session.query(ChatHistory).filter_by(socket_id=socket_id).first()
         if not chat_history:
             chat_history = ChatHistory(socket_id=socket_id, messages=[])
-            db.session.add(chat_history)
-            db.session.commit()
+            session.add(chat_history)
+            session.commit()
         return chat_history 
