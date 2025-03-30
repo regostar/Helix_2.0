@@ -24,6 +24,15 @@ from config.config import (
     FROM_EMAIL,
     OPENAI_API_KEY
 )
+from openai import (
+    RateLimitError,
+    APIConnectionError,
+    APITimeoutError,
+    APIError,
+    BadRequestError,
+    AuthenticationError,
+    PermissionDeniedError
+)
 
 load_dotenv()
 
@@ -720,8 +729,65 @@ Do not include any other text before or after the JSON."""
             }
 
             # Get the response using the prompt template
-            response = self.llm(self.prompt.format_messages(**prompt_variables))
-            llm_response = response.content.strip()
+            try:
+                response = self.llm(self.prompt.format_messages(**prompt_variables))
+                llm_response = response.content.strip()
+            except RateLimitError as e:
+                print(f"OpenAI API Rate Limit Error: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": "We've reached our API usage limit. Please try again later or contact support.",
+                    "error_type": "rate_limit"
+                })
+            except APIConnectionError as e:
+                print(f"OpenAI API Connection Error: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": "Unable to connect to the AI service. Please check your internet connection and try again.",
+                    "error_type": "connection_error"
+                })
+            except APITimeoutError as e:
+                print(f"OpenAI API Timeout Error: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": "The AI service is taking too long to respond. Please try again.",
+                    "error_type": "timeout_error"
+                })
+            except BadRequestError as e:
+                print(f"OpenAI API Bad Request Error: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": "Invalid request to the AI service. Please try again.",
+                    "error_type": "bad_request"
+                })
+            except AuthenticationError as e:
+                print(f"OpenAI API Authentication Error: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": "Authentication failed with the AI service. Please contact support.",
+                    "error_type": "authentication_error"
+                })
+            except PermissionDeniedError as e:
+                print(f"OpenAI API Permission Error: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": "You don't have permission to use this service. Please contact support.",
+                    "error_type": "permission_error"
+                })
+            except APIError as e:
+                print(f"OpenAI API Error: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": "An error occurred with the AI service. Please try again later.",
+                    "error_type": "api_error"
+                })
+            except Exception as e:
+                print(f"Unexpected error in LLM call: {str(e)}")
+                return json.dumps({
+                    "status": "error",
+                    "message": "An unexpected error occurred while processing your request. Please try again.",
+                    "error_type": "unexpected_error"
+                })
             
             # Try to parse as JSON first
             try:
