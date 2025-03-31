@@ -1,6 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { io, Socket } from 'socket.io-client';
 
+/*
+- Manages socket connection
+- Handles reconnection logic
+- Provides socket instance to components
+*/
+
 // Add socket to window object type for global access
 // This is for backward compatibility with existing code
 // that accesses window.socket directly

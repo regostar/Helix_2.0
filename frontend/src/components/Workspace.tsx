@@ -41,7 +41,11 @@ import EmailIcon from '@mui/icons-material/Email';
 import LinkedIn from '@mui/icons-material/LinkedIn';
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline';
 import SequenceDisplay from './SequenceDisplay';
-
+/*
+- Split view with chat and sequence
+- Responsive design
+- State management for both sections
+*/
 interface SequenceStep {
   id: string;
   type: string;
