@@ -1,8 +1,8 @@
-"""Create sequence and chat_history tables
+"""init
 
-Revision ID: 97ca7285e1b5
+Revision ID: 38f2842623cc
 Revises: 
-Create Date: 2025-03-30 23:52:38.796366
+Create Date: 2025-03-31 12:34:20.008830
 
 """
 from alembic import op
@@ -10,7 +10,7 @@ import sqlalchemy as sa
 
 
 # revision identifiers, used by Alembic.
-revision = '97ca7285e1b5'
+revision = '38f2842623cc'
 down_revision = None
 branch_labels = None
 depends_on = None
