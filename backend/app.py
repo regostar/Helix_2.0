@@ -1,9 +1,8 @@
 from flask import Flask
 from flask_socketio import SocketIO
 from flask_cors import CORS
-from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
 from dotenv import load_dotenv
-from agent import RecruitingAgent
 import os
 from sqlalchemy.exc import SQLAlchemyError
 from config.config import (
@@ -11,10 +10,6 @@ from config.config import (
     SQLALCHEMY_TRACK_MODIFICATIONS,
     SQLALCHEMY_ENGINE_OPTIONS
 )
-from models.sequence import Sequence
-from models.chat_history import ChatHistory
-from routes.api_routes import init_routes
-from routes.socket_routes import init_socket_routes
 
 # Load environment variables
 load_dotenv()
@@ -28,13 +23,23 @@ app.config['SQLALCHEMY_DATABASE_URI'] = SQLALCHEMY_DATABASE_URI
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = SQLALCHEMY_TRACK_MODIFICATIONS
 app.config['SQLALCHEMY_ENGINE_OPTIONS'] = SQLALCHEMY_ENGINE_OPTIONS
 
+# Initialize SQLAlchemy and Migrate
+from models.database import db, init_db
+init_db(app)
+migrate = Migrate(app, db)
+
+# Import models after db is initialized
+from models.sequence import Sequence
+from models.chat_history import ChatHistory
+from agent import RecruitingAgent
+from routes.api_routes import init_routes
+from routes.socket_routes import init_socket_routes
+
 try:
-    db = SQLAlchemy(app)
-    # Test the database connection and create tables
+    # Test the database connection
     with app.app_context():
         db.engine.connect()
-        db.create_all()
-    print("Successfully connected to PostgreSQL database and created tables")
+    print("Successfully connected to PostgreSQL database")
 except SQLAlchemyError as e:
     print(f"Error connecting to database: {str(e)}")
     raise

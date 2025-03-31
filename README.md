@@ -98,3 +98,29 @@ This project is licensed under the MIT License - see the LICENSE file for detail
 - Inspired by SellScale's Selix
 - Built with modern AI and web technologies
 - Special thanks to the open-source community 
+
+
+## DATABASE Migrations
+
+```bash
+pip install Flask-Migrate
+```
+
+Update app.py to use Flask-Migrate
+
+```bash
+# To initialize the database - RUN ONLY ONCE
+python init_db.py
+
+
+# start here for Migrations
+flask db migrate -m "Description of your changes"
+
+# Review the files in migrations/versions/
+
+# to apply the migration
+flask db upgrade
+
+# Rollback -
+flask db downgrade
+```
