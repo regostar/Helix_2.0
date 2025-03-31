@@ -1,7 +1,5 @@
 from datetime import datetime, UTC
-from flask_sqlalchemy import SQLAlchemy
-
-db = SQLAlchemy()
+from .database import db
 
 class ChatHistory(db.Model):
     id = db.Column(db.Integer, primary_key=True)
