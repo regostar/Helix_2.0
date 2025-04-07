@@ -12,6 +12,74 @@ Helix is a real-time recruiting sequence generation and management system that u
 ![image](https://github.com/user-attachments/assets/99f3e7ee-d9cc-482e-a087-b4af9aa57660)
 
 
+# Helix 2.0
+
+Helix 2.0 is an experimental Agentic AI framework designed for orchestrating autonomous and semi-autonomous agents capable of complex task execution. The system leverages a modular architecture where agents collaborate, plan, and act towards goals in a dynamic environment.
+
+---
+
+## 🚀 Features
+
+- 🧠 **Agentic AI Framework**: Modular agents with memory, reasoning, and planning capabilities.
+- 🔄 **Looped Execution**: Recursive task decomposition and feedback-driven refinement.
+- 🧩 **Tool Usage**: Agents interact with various tools including search engines, file systems, and data parsers.
+- 🗃️ **Memory System**: Contextual memory for relevant task history and decision making.
+- 📡 **Planning Engine**: High-level decomposition of user goals into executable subtasks.
+- 🧾 **Task & Subtask Management**: Threaded communication between agents with execution chains.
+- 📁 **File I/O Support**: Handle file creation, reading, and writing as part of task execution.
+- 🧪 **Built-in Eval & Logging**: Agent outputs can be traced and evaluated for quality.
+
+---
+
+## 🧰 Tech Stack
+
+| Layer             | Technology                          |
+|------------------|--------------------------------------|
+| Programming Lang | Python 3.11                          |
+| Agent Framework  | Langchain |
+| LLM Backend      | Langchain, OpenAI GPT (via `openai` SDK)       |
+| Planning Module  | GPT-based task planner               |
+| Search Tool      | DuckDuckGo API                      |
+| Web Integration  | Gradio (planned )         |
+| Web backend  | Flask, SQLAlchemy       |
+| Frontend  | Typescript, React, Tailwindcss, MaterialUI    |
+| Database | Postgresql    |
+
+---
+
+## 🧠 Agentic AI Flow
+
+Helix 2.0 adopts a goal-oriented, modular agent architecture where agents autonomously collaborate to decompose, plan, and solve problems.
+
+### 🔁 Flow Overview
+
+1. **User Input**: A goal or query is submitted by the user.
+2. **Planner Agent**: (complete)
+   - Decomposes the goal into high-level subtasks.
+   - Assigns subtasks to specialized agents.
+3. **Executor Agents**: (In progress)
+   - Perform subtasks (e.g., web search, csv manipulation, file manipulation).
+   - Loop with memory context and tool access.
+4. **Memory Module**:
+   - Stores past actions and retrieved data.
+   - Supports retrieval of relevant context for each task loop.
+5. **Controller**:
+   - Manages the communication between agents.
+   - Monitors task completion, success/failure, and reassignments if needed.
+6. **Result Aggregation**:
+   - Final response or output is composed and returned to the user.
+
+### 📌 Key Agents
+
+- `PlannerAgent`: Converts user goals into executable plans.
+- `ExecAgent`: Executes subtasks using reasoning and tool access.
+- `MemoryAgent`: Handles context persistence and lookup.
+- `ToolAgent`: Interfaces with tools like DuckDuckGo or file ops.
+- `Controller`: Orchestrates the entire workflow and manages state.
+
+---
+
+
 ## Prerequisites
 
 - Docker
