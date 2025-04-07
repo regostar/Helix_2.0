@@ -72,12 +72,16 @@ Helix 2.0 adopts a goal-oriented, modular agent architecture where agents autono
 ### 📌 Key Agents
 
 - `PlannerAgent`: Converts user goals into executable plans.
-- `ExecAgent`: Executes subtasks using reasoning and tool access.
+- `ExecAgent`: Executes subtasks using reasoning and tool access. (In progress)
 - `MemoryAgent`: Handles context persistence and lookup.
 - `ToolAgent`: Interfaces with tools like DuckDuckGo or file ops.
 - `Controller`: Orchestrates the entire workflow and manages state.
 
 ---
+
+## Demo
+
+https://www.loom.com/share/dfa8e90aa633443a9ef4de9f50ddfe72?sid=18512ac9-c625-4567-b92f-6572cf32d124
 
 
 ## Prerequisites
