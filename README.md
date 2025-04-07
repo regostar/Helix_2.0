@@ -2,6 +2,16 @@
 
 Helix is a real-time recruiting sequence generation and management system that uses AI to help create personalized recruiting sequences.
 
+## Product
+
+![image](https://github.com/user-attachments/assets/969d8140-0383-406b-81c6-78b73b4d762d)
+
+
+## Architecture
+
+![image](https://github.com/user-attachments/assets/99f3e7ee-d9cc-482e-a087-b4af9aa57660)
+
+
 ## Prerequisites
 
 - Docker
