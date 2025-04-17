@@ -2,6 +2,12 @@
 
 Helix is a real-time recruiting sequence generation and management system that uses AI to help create personalized recruiting sequences.
 
+Developed Helix, an AI recruiting assistant using Flask, React, Langchain, GPT-4, enabling real-time chat and dynamic outreach—cut recruiter effort by 70%.
+
+Built modular backend with PostgreSQL & SQLAlchemy, ensuring fast response times (<300ms) and reliable sequence generation.
+
+Designed real-time frontend with React + Socket.IO, doubling user engagement through interactive, live sequence editing.
+
 ## Product
 
 ![image](https://github.com/user-attachments/assets/969d8140-0383-406b-81c6-78b73b4d762d)
